@@ -22,8 +22,6 @@ final class AppState: ObservableObject {
     @Published var modelStatus = "Checking engine…"
     @Published var history: [DictationEntry] = []
     @Published var historyFilter = ""
-    @Published var llmDownloadProgress: Double = 0
-    @Published var llmStatus = "LLM off"
     @Published var permissions = PermissionDoctor.snapshot()
     @Published var modelDownloadProgress: Double = 0
     @Published var modelDownloadStatus = ""
@@ -34,8 +32,6 @@ final class AppState: ObservableObject {
     @AppStorage("transcriptionEngine") var transcriptionEngineRaw: String = TranscriptionEngine.appleSpeech.rawValue
     @AppStorage("modelID") var modelID: String = WhisperModel.small.rawValue
     @AppStorage("speedPreset") var speedPresetRaw: String = SpeedPreset.balanced.rawValue
-    @AppStorage("enhancementMode") var enhancementModeRaw: String = EnhancementMode.off.rawValue
-    @AppStorage("suggestedLLM") var suggestedLLMRaw: String = SuggestedLLM.recommended.rawValue
     @AppStorage("autoPaste") var autoPaste = true
     @AppStorage("playSounds") var playSounds = false
     @AppStorage("showLiveOverlay") var showLiveOverlay = true
@@ -93,15 +89,6 @@ final class AppState: ObservableObject {
         set { modelID = newValue.rawValue }
     }
 
-    var enhancementMode: EnhancementMode {
-        get { EnhancementMode(rawValue: enhancementModeRaw) ?? .off }
-        set { enhancementModeRaw = newValue.rawValue }
-    }
-
-    var suggestedLLM: SuggestedLLM {
-        get { SuggestedLLM(rawValue: suggestedLLMRaw) ?? .recommended }
-        set { suggestedLLMRaw = newValue.rawValue }
-    }
 
     var filteredHistory: [DictationEntry] {
         let q = historyFilter.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -119,11 +106,10 @@ final class AppState: ObservableObject {
     let appleSpeech = AppleSpeechService()
     let injector = TextInjector()
     let hotkey = HotkeyService()
-    let webLLM = WebLLMEnhancer.shared
     let dictionary = DictionaryStore.shared
     let modelDownloader = ModelDownloadService.shared
     private var overlay: OverlayController?
-    private var llmCancellables = Set<AnyCancellable>()
+    private var cancellables = Set<AnyCancellable>()
     private var pipelineTask: Task<Void, Never>?
     private var sessionID = UUID()
     private var rewriteSourceText: String?
@@ -133,7 +119,6 @@ final class AppState: ObservableObject {
     func bootstrap() {
         overlay = OverlayController(appState: self)
         loadHistory()
-        bindLLMStatus()
         bindModelDownload()
         rebindHotkey()
         playSounds = false
@@ -195,22 +180,14 @@ final class AppState: ObservableObject {
         permissions = PermissionDoctor.snapshot()
     }
 
-    private func bindLLMStatus() {
-        webLLM.$statusText.receive(on: RunLoop.main).sink { [weak self] t in self?.llmStatus = t }.store(in: &llmCancellables)
-        webLLM.$progress.receive(on: RunLoop.main).sink { [weak self] p in self?.llmDownloadProgress = p }.store(in: &llmCancellables)
-        webLLM.$isReady.receive(on: RunLoop.main).sink { [weak self] ready in
-            guard let self, self.enhancementMode == .webLLM else { return }
-            self.llmStatus = ready ? "LLM ready" : self.webLLM.statusText
-        }.store(in: &llmCancellables)
-    }
 
     private func bindModelDownload() {
         modelDownloader.$progress.receive(on: RunLoop.main).sink { [weak self] p in
             self?.modelDownloadProgress = p
-        }.store(in: &llmCancellables)
+        }.store(in: &cancellables)
         modelDownloader.$status.receive(on: RunLoop.main).sink { [weak self] s in
             self?.modelDownloadStatus = s
-        }.store(in: &llmCancellables)
+        }.store(in: &cancellables)
     }
 
     func refreshModelStatus() async {
@@ -225,11 +202,6 @@ final class AppState: ObservableObject {
             modelReady = status.ready
             modelStatus = status.message
         }
-        if enhancementMode == .webLLM {
-            llmStatus = webLLM.isReady ? "LLM ready" : webLLM.statusText
-        } else {
-            llmStatus = "LLM off"
-        }
         if !modelReady { statusText = modelStatus }
     }
 
@@ -242,24 +214,6 @@ final class AppState: ObservableObject {
         modelStatus = status.ready ? "\(selectedModel.displayName) warm" : status.message
     }
 
-    func downloadSuggestedLLM() {
-        enhancementMode = .webLLM
-        Task {
-            do {
-                statusText = "Downloading LLM… (if stuck at stage 7/8, cancel & use without LLM)"
-                try await webLLM.prepare(model: suggestedLLM)
-                statusText = "LLM ready"
-                llmStatus = "LLM ready"
-                errorMessage = nil
-            } catch {
-                errorMessage = error.localizedDescription
-                statusText = "LLM failed — dictation still works with smart punctuation"
-                llmStatus = error.localizedDescription
-                // Don't leave boost "on" in a broken state for every utterance
-                // User can retry; enhance() only runs when isReady
-            }
-        }
-    }
 
     func downloadWhisperModel(_ model: WhisperModel? = nil) {
         let m = model ?? selectedModel
@@ -339,9 +293,7 @@ final class AppState: ObservableObject {
         let whisperModel = selectedModel
         let dictationMode = mode
         let lang = language
-        let wantEnhance = enhancementMode == .webLLM && webLLM.isReady
         let wantPaste = autoPaste
-        let llm = suggestedLLM
         let selectedForRewrite = rewriteSourceText
         let targetBundle = injector.targetApp?.bundleIdentifier
 
@@ -401,7 +353,7 @@ final class AppState: ObservableObject {
                     text = self.dictionary.apply(text)
                 }
 
-                // Articulate: ALWAYS transform (offline is aggressive; LLM optional boost)
+                // Articulate: offline-only restructuring for AI prompts / specs
                 if dictationMode == .articulate, !text.isEmpty {
                     let before = text
                     self.isEnhancing = true
@@ -411,72 +363,15 @@ final class AppState: ObservableObject {
                     self.overlay?.show()
                     self.overlay?.refreshLayout()
 
-                    // Offline articulator first (always changes structure when multi-idea)
                     text = ArticulateService.articulate(text)
                     text = self.dictionary.apply(text)
-                    self.livePreview = text
-                    self.overlay?.refreshLayout()
 
-                    // Optional LLM on top of offline result
-                    if self.webLLM.isReady {
-                        self.statusText = "Articulating with LLM…"
-                        do {
-                            let polished = try await self.webLLM.enhance(
-                                text,
-                                model: llm,
-                                style: "articulate"
-                            )
-                            // Only keep LLM if it still looks like content (not meta)
-                            if !polished.isEmpty, polished != before {
-                                let merged = ArticulateService.articulate(polished)
-                                if !merged.isEmpty { text = self.dictionary.apply(merged) }
-                            }
-                        } catch {
-                            // keep offline result
-                        }
-                    }
-
-                    // If somehow unchanged, force a visible structure pass once more
                     if text.trimmingCharacters(in: .whitespacesAndNewlines)
                         .caseInsensitiveCompare(before) == .orderedSame {
                         text = ArticulateService.articulate("I want the following: " + before)
                     }
 
                     self.statusText = "Articulated"
-                    self.isEnhancing = false
-                    self.livePreview = text
-                    self.overlay?.refreshLayout()
-                } else if wantEnhance, !text.isEmpty {
-                    self.isEnhancing = true
-                    self.statusText = "Polishing with LLM…"
-                    self.livePreview = text
-                    self.showOverlay = true
-                    self.overlay?.show()
-                    self.overlay?.refreshLayout()
-                    do {
-                        if self.webLLM.isReady {
-                            let polished = try await self.webLLM.enhance(
-                                text,
-                                model: llm,
-                                style: "clean"
-                            )
-                            if !polished.isEmpty {
-                                text = TranscriptFormatter.format(
-                                    polished,
-                                    options: TranscriptFormatter.options(
-                                        forBundleID: targetBundle,
-                                        smartPunctuation: self.smartPunctuation,
-                                        stripFillers: false
-                                    )
-                                )
-                                text = self.dictionary.apply(text)
-                            }
-                        } else {
-                            self.errorMessage = "LLM not ready — used smart punctuation instead"
-                        }
-                    } catch {
-                        self.errorMessage = "LLM polish skipped: \(error.localizedDescription)"
-                    }
                     self.isEnhancing = false
                     self.livePreview = text
                     self.overlay?.refreshLayout()
@@ -529,9 +424,7 @@ final class AppState: ObservableObject {
                     switch method {
                     case .accessibility, .appleScriptPaste, .terminalPaste:
                         self.statusText = intoTerminal ? "Pasted ✓" : "Inserted ✓"
-                        if self.errorMessage?.contains("LLM") != true {
-                            self.errorMessage = nil
-                        }
+                        self.errorMessage = nil
                     case .clipboardPaste:
                         self.statusText = "Sent paste — ⌘V if missing"
                     case .clipboardOnly, .none:
@@ -563,7 +456,7 @@ final class AppState: ObservableObject {
         }
     }
 
-    /// Lightweight rewrite without LLM: apply instruction keywords or append.
+    /// Lightweight rewrite: apply instruction keywords or replace selection.
     private func applyRewrite(source: String, instruction: String) -> String {
         let instr = instruction.lowercased()
         if instr.contains("upper") { return source.uppercased() }

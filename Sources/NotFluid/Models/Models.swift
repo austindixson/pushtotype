@@ -196,59 +196,6 @@ enum HotkeyPreset: String, CaseIterable, Identifiable {
     }
 }
 
-// MARK: - LLM enhancement
-
-enum EnhancementMode: String, CaseIterable, Identifiable {
-    case off
-    case webLLM
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .off: return "Off"
-        case .webLLM: return "WebLLM (WebGPU)"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .off: return "Rule-based punctuation only"
-        case .webLLM: return "Local LLM polish via WebGPU"
-        }
-    }
-}
-
-enum SuggestedLLM: String, CaseIterable, Identifiable {
-    case qwen25_05b = "Qwen2.5-0.5B-Instruct-q4f16_1-MLC"
-    case llama32_1b = "Llama-3.2-1B-Instruct-q4f16_1-MLC"
-    case qwen25_15b = "Qwen2.5-1.5B-Instruct-q4f16_1-MLC"
-    case phi35_mini = "Phi-3.5-mini-instruct-q4f16_1-MLC"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .qwen25_05b: return "Qwen2.5 0.5B ⭐"
-        case .llama32_1b: return "Llama 3.2 1B"
-        case .qwen25_15b: return "Qwen2.5 1.5B"
-        case .phi35_mini: return "Phi-3.5 Mini (~3.8B)"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .qwen25_05b: return "~0.5B · fastest polish"
-        case .llama32_1b: return "~1B · stronger English"
-        case .qwen25_15b: return "~1.5B · multilingual"
-        case .phi35_mini: return "~3.8B · highest quality"
-        }
-    }
-
-    var modelId: String { rawValue }
-    static var recommended: SuggestedLLM { .qwen25_05b }
-}
-
 // MARK: - Dictionary
 
 struct DictionaryEntry: Identifiable, Codable, Equatable {

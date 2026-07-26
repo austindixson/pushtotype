@@ -7,8 +7,8 @@ Repo: [github.com/austindixson/pushtotype](https://github.com/austindixson/pusht
 - **100% on-device** — audio never leaves your Mac  
 - **SwiftUI menu-bar app** — real AppKit/Swift, not Electron  
 - **Engine choice** — **macOS Speech** (zero download) or **Whisper** (download open models)  
-- **LLM boost** — optional **WebLLM + WebGPU** polish (Qwen 0.5B suggested)  
 - **Push-to-talk** — hold `Right ⌥`, speak, release → text pastes into any app (including **Terminal**)  
+- **Articulate** — offline restructuring for AI prompts / project ideas  
 
 Full roadmap: **[BUILD_PLAN.md](./BUILD_PLAN.md)**
 
@@ -38,7 +38,7 @@ FluidVoice leans on Parakeet for raw speed (great for English). **n0tfluid** bet
 - **Smart punctuation**, **dictionary** replacements, app-aware cleanup
 - **Permission doctor** chips in the menu
 - **In-app Whisper model download**
-- History search / pin / export · LLM boost (optional) · Quit / Test paste
+- History search / pin / export · Quit / Test paste
 
 ---
 
@@ -56,11 +56,10 @@ Prioritized backlog (detail in [BUILD_PLAN.md](./BUILD_PLAN.md)):
 
 ### Quality
 
-6. **Native LLM polish** (MLX / llama.cpp) instead of fragile WebLLM  
-7. **App-aware cleanup** — Terminal keeps shell-safe text; Mail/Slack get nicer prose  
-8. **Personal dictionary** — force spellings / expansions  
-9. **History search / re-paste / export**  
-10. **Per-app profiles** — different engine or prompt per app  
+6. **App-aware cleanup** — Terminal keeps shell-safe text; Mail/Slack get nicer prose  
+7. **Personal dictionary** — force spellings / expansions  
+8. **History search / re-paste / export**  
+9. **Per-app profiles** — different engine or prompt per app  
 
 ### Product depth
 
@@ -84,7 +83,7 @@ Prioritized backlog (detail in [BUILD_PLAN.md](./BUILD_PLAN.md)):
 |-------|--------|
 | **A — Feel instant** | Streaming partials, warm model, fast English preset, permissions UI |
 | **B — Control** | Hotkey recorder, dictionary, per-app profiles |
-| **C — Intelligence** | Native polish LLM, rewrite mode, app-aware rules |
+| **C — Intelligence** | Stronger Articulate, rewrite mode, app-aware rules |
 | **D — Ship** | In-app downloads, vendored STT, notarized releases |
 
 ---
@@ -147,7 +146,7 @@ n0tfluid/
 ├── Sources/NotFluid/
 │   ├── App/            # SwiftUI app + AppState
 │   ├── Audio/          # 16 kHz mono WAV capture
-│   ├── Transcription/  # Whisper + Apple Speech + WebLLM
+│   ├── Transcription/  # Whisper + Apple Speech
 │   ├── Input/          # Hotkey + text injection (Terminal-aware)
 │   ├── UI/             # Menu bar, overlay, settings
 │   ├── Models/
@@ -170,22 +169,19 @@ swift build -c release --product NotFluid
 # Paste regression (TextEdit + AX)
 swift build --product PasteTest && .build/debug/PasteTest
 
-# Boost path benchmark (raw STT vs punctuation vs Articulate vs simulated LLM)
+# Post-STT path benchmark (raw vs punctuation vs Articulate)
 ./scripts/benchmark-boost.sh
-# → prints latency + quality vs gold; writes benchmark-boost-last.txt
 ```
 
-### Boost benchmark (with vs without)
+### Post-STT benchmark
 
-Compares **post-STT** paths on fixed fixtures (no mic, no WebGPU):
+Compares offline paths on fixed fixtures (no mic):
 
 | Path | What it measures |
 |------|------------------|
 | STT only | Raw transcript |
 | + smart punctuation | Rule cleanup |
 | + Articulate | Offline idea restructuring |
-| + LLM good + sanitize | Faithful model polish |
-| + LLM bad + sanitize | Meta-reply rejection (should fallback) |
 
 ```bash
 ./scripts/benchmark-boost.sh
@@ -200,8 +196,6 @@ Models: `~/Library/Application Support/NotFluid/Models/`
 - No accounts, no cloud STT by default  
 - Temporary WAVs deleted after transcription  
 - History is local JSON only  
-- LLM boost runs on-device when enabled  
-
 ---
 
 ## License

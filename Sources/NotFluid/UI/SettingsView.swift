@@ -3,7 +3,6 @@ import AppKit
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
-    @ObservedObject private var webLLM = WebLLMEnhancer.shared
     @ObservedObject private var modelDL = ModelDownloadService.shared
     @ObservedObject private var dictionary = DictionaryStore.shared
     @State private var newFind = ""
@@ -14,7 +13,6 @@ struct SettingsView: View {
             generalTab.tabItem { Label("General", systemImage: "gearshape") }
             engineTab.tabItem { Label("Speech", systemImage: "waveform") }
             dictionaryTab.tabItem { Label("Dictionary", systemImage: "textformat.abc") }
-            llmTab.tabItem { Label("LLM Boost", systemImage: "brain") }
             permissionsTab.tabItem { Label("Permissions", systemImage: "lock.shield") }
             aboutTab.tabItem { Label("About", systemImage: "info.circle") }
         }
@@ -33,7 +31,7 @@ struct SettingsView: View {
                 }
                 Text(appState.mode.subtitle).font(.caption).foregroundStyle(.secondary)
                 if appState.mode == .articulate {
-                    Text("Articulate turns rough spoken ideas into clear prose for AI chats, specs, and planning. Works offline; uses LLM boost when the model is ready.")
+                    Text("Articulate turns rough spoken ideas into clear prose for AI chats, specs, and planning. Runs fully offline.")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }
@@ -213,69 +211,6 @@ struct SettingsView: View {
                     newReplace = ""
                 }
                 .disabled(newFind.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-
-    private var llmTab: some View {
-        Form {
-            Section {
-                Text("Optional second pass after rule-based punctuation. WebLLM downloads once, then runs on-device via WebGPU.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            Section("Enhancement") {
-                Picker("Mode", selection: Binding(
-                    get: { appState.enhancementMode },
-                    set: { appState.enhancementMode = $0 }
-                )) {
-                    ForEach(EnhancementMode.allCases) { Text($0.displayName).tag($0) }
-                }
-                .pickerStyle(.radioGroup)
-            }
-            if appState.enhancementMode == .webLLM {
-                Section("Model (experimental)") {
-                    Text("WebLLM often stalls at stage 7/8 (WebGPU in WebKit). Prefer Qwen 0.5B. Smart punctuation still runs if LLM fails. Download once before dictating.")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Picker("LLM", selection: Binding(
-                        get: { appState.suggestedLLM },
-                        set: { appState.suggestedLLM = $0 }
-                    )) {
-                        ForEach(SuggestedLLM.allCases) { Text($0.displayName).tag($0) }
-                    }
-                    Text(appState.suggestedLLM.detail).font(.caption).foregroundStyle(.secondary)
-                    if webLLM.isLoading {
-                        ProgressView(value: webLLM.progress) {
-                            Text(webLLM.statusText).font(.caption).lineLimit(2)
-                        }
-                        if !webLLM.stageLabel.isEmpty {
-                            Text(webLLM.stageLabel)
-                                .font(.caption2)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(3)
-                        }
-                        Button("Cancel download") { webLLM.cancelLoad() }
-                    } else {
-                        Text(webLLM.isReady ? "Ready" : webLLM.statusText)
-                            .foregroundStyle(webLLM.isReady ? .green : .secondary)
-                            .lineLimit(3)
-                    }
-                    if let err = webLLM.lastError {
-                        Text(err)
-                            .font(.caption2)
-                            .foregroundStyle(.red)
-                            .lineLimit(4)
-                    }
-                    Button("Download & warm LLM") {
-                        appState.suggestedLLM = .qwen25_05b
-                        appState.downloadSuggestedLLM()
-                    }
-                    .disabled(webLLM.isLoading)
-                    Button("Unload") { webLLM.unload() }
-                }
             }
         }
         .formStyle(.grouped)

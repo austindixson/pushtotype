@@ -21,7 +21,7 @@ Living roadmap. **v0.2 executed** major Phase A–D items below.
 | Permission doctor banner | ✅ |
 | In-app Whisper model download | ✅ |
 | History search / pin / export | ✅ |
-| LLM boost WebLLM | ⚠️ optional |
+| LLM boost | ❌ removed |
 | Stable signing script | ✅ `scripts/sign-stable.sh` |
 | Vendor whisper.cpp / notarize | ⏳ backlog |
 
@@ -43,7 +43,7 @@ Living roadmap. **v0.2 executed** major Phase A–D items below.
 ### Phase C — Intelligence
 - [x] **Rewrite mode** — select text, dictate instruction (upper/lower/title/shorter/full replace)
 - [x] **App-aware rules** in `TranscriptFormatter.options(forBundleID:)`
-- [ ] Native MLX/llama.cpp polish — still WebLLM optional (backlog)
+- [x] LLM boost removed (not worth complexity)
 
 ### Phase D — Ship
 - [x] **In-app ggml download** — Settings → Speech → Download
@@ -58,14 +58,12 @@ Living roadmap. **v0.2 executed** major Phase A–D items below.
 
 1. True streaming decode for **Whisper** (not only Apple Speech partials)
 2. Full **hotkey recorder** (capture any combo)
-3. **Native** LLM polish (MLX / llama.cpp)
-4. LLM-powered rewrite (not only heuristics)
-5. Command mode / Shortcuts
-6. VAD hands-free
-7. Vendor whisper.cpp + notarized releases
-8. Notch-aware overlay layout
-9. Per-app engine/profile persistence UI
-10. Opt-in latency metrics
+3. Command mode / Shortcuts
+4. VAD hands-free
+5. Vendor whisper.cpp + notarized releases
+6. Notch-aware overlay layout
+7. Per-app engine/profile persistence UI
+8. Opt-in latency metrics
 
 ---
 

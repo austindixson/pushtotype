@@ -70,7 +70,6 @@ struct MenuBarView: View {
         if appState.transcriptionEngine == .whisper {
             parts.append(appState.speedPreset.displayName)
         }
-        if appState.enhancementMode == .webLLM { parts.append("LLM") }
         return parts.joined(separator: " · ")
     }
 
@@ -158,18 +157,6 @@ struct MenuBarView: View {
                 .font(.caption)
                 .toggleStyle(.switch)
                 .controlSize(.small)
-            Toggle("LLM boost (WebGPU)", isOn: Binding(
-                get: { appState.enhancementMode == .webLLM },
-                set: { on in
-                    appState.enhancementMode = on ? .webLLM : .off
-                    if on && !WebLLMEnhancer.shared.isReady {
-                        appState.downloadSuggestedLLM()
-                    }
-                }
-            ))
-            .font(.caption)
-            .toggleStyle(.switch)
-            .controlSize(.small)
         }
     }
 
@@ -190,12 +177,6 @@ struct MenuBarView: View {
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
-                if appState.enhancementMode == .webLLM {
-                    Text(appState.llmStatus)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
                 if let err = appState.errorMessage {
                     Text(err)
                         .font(.caption2)

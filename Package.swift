@@ -26,8 +26,7 @@ let package = Package(
                 .linkedFramework("AppKit"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("ApplicationServices"),
-                .linkedFramework("Speech"),
-                .linkedFramework("WebKit")
+                .linkedFramework("Speech")
             ]
         ),
         .executableTarget(

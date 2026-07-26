@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Compare post-STT paths: raw vs punctuation vs Articulate vs simulated LLM (+ sanitizer).
+# Compare post-STT paths: raw vs punctuation vs Articulate (offline only).
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
