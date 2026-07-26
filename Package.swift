@@ -8,11 +8,18 @@ let package = Package(
     ],
     products: [
         .executable(name: "NotFluid", targets: ["NotFluid"]),
-        .executable(name: "PasteTest", targets: ["PasteTest"])
+        .executable(name: "PasteTest", targets: ["PasteTest"]),
+        .executable(name: "BoostBenchmark", targets: ["BoostBenchmark"]),
+        .library(name: "NotFluidSupport", targets: ["NotFluidSupport"])
     ],
     targets: [
+        .target(
+            name: "NotFluidSupport",
+            path: "Sources/NotFluidSupport"
+        ),
         .executableTarget(
             name: "NotFluid",
+            dependencies: ["NotFluidSupport"],
             path: "Sources/NotFluid",
             linkerSettings: [
                 .linkedFramework("AVFoundation"),
@@ -31,6 +38,11 @@ let package = Package(
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("Carbon")
             ]
+        ),
+        .executableTarget(
+            name: "BoostBenchmark",
+            dependencies: ["NotFluidSupport"],
+            path: "Sources/BoostBenchmark"
         )
     ]
 )

@@ -169,6 +169,26 @@ swift build -c release --product NotFluid
 
 # Paste regression (TextEdit + AX)
 swift build --product PasteTest && .build/debug/PasteTest
+
+# Boost path benchmark (raw STT vs punctuation vs Articulate vs simulated LLM)
+./scripts/benchmark-boost.sh
+# → prints latency + quality vs gold; writes benchmark-boost-last.txt
+```
+
+### Boost benchmark (with vs without)
+
+Compares **post-STT** paths on fixed fixtures (no mic, no WebGPU):
+
+| Path | What it measures |
+|------|------------------|
+| STT only | Raw transcript |
+| + smart punctuation | Rule cleanup |
+| + Articulate | Offline idea restructuring |
+| + LLM good + sanitize | Faithful model polish |
+| + LLM bad + sanitize | Meta-reply rejection (should fallback) |
+
+```bash
+./scripts/benchmark-boost.sh
 ```
 
 Models: `~/Library/Application Support/NotFluid/Models/`

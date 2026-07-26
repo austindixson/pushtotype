@@ -2,22 +2,22 @@ import Foundation
 
 /// Rule-based cleanup for dictation: spacing, punctuation, capitalization.
 /// Runs instantly after STT (before optional LLM polish).
-enum TranscriptFormatter {
+public enum TranscriptFormatter {
 
-    struct Options: Sendable {
+    public struct Options: Sendable {
         /// Fix spaces, punctuation glue, capitalization.
-        var smartPunctuation: Bool = true
+        public var smartPunctuation: Bool = true
         /// Collapse "um" / "uh" / "like" filler (light; not aggressive).
-        var stripLightFillers: Bool = false
+        public var stripLightFillers: Bool = false
         /// Terminal / code: skip sentence capitalization and curly quotes.
-        var plainShellSafe: Bool = false
+        public var plainShellSafe: Bool = false
 
-        static let `default` = Options()
-        static let terminal = Options(smartPunctuation: true, stripLightFillers: false, plainShellSafe: true)
+        public static let `default` = Options()
+        public static let terminal = Options(smartPunctuation: true, stripLightFillers: false, plainShellSafe: true)
     }
 
     /// App-aware options from frontmost bundle id.
-    static func options(
+    public static func options(
         forBundleID bundleID: String?,
         smartPunctuation: Bool,
         stripFillers: Bool
@@ -33,7 +33,7 @@ enum TranscriptFormatter {
         return opts
     }
 
-    static func format(_ raw: String, options: Options = .default) -> String {
+    public static func format(_ raw: String, options: Options = .default) -> String {
         var s = raw
         if s.isEmpty { return s }
 

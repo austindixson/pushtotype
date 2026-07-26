@@ -2,10 +2,10 @@ import Foundation
 
 /// Turns rough spoken brainstorming into clear, structured prose for AI tools.
 /// Offline path is intentionally aggressive so results *feel* different from Dictate.
-enum ArticulateService {
+public enum ArticulateService {
 
     /// Offline articulation — always runs in Articulate mode.
-    static func articulate(_ raw: String) -> String {
+    public static func articulate(_ raw: String) -> String {
         var s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !s.isEmpty else { return s }
 

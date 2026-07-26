@@ -1,4 +1,5 @@
 import Foundation
+import NotFluidSupport
 import Combine
 import AppKit
 import SwiftUI
