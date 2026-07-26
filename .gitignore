@@ -1,0 +1,28 @@
+.DS_Store
+.build/
+dist/
+DerivedData/
+*.xcuserstate
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+.swiftpm/
+Packages/
+Package.resolved
+
+# Model weights (download separately)
+Models/*.bin
+Models/*.mlmodelc
+*.gguf
+*.mlpackage
+
+# Audio / temp
+*.wav
+*.caf
+*.mp3
+*.m4a
+
+# Secrets / local
+.env
+.env.*
+*.pem
+*.p12
