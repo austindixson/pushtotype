@@ -84,6 +84,7 @@ enum SpeedPreset: String, CaseIterable, Identifiable {
 
 enum TranscriptionEngine: String, CaseIterable, Identifiable {
     case appleSpeech
+    case parakeet
     case whisper
 
     var id: String { rawValue }
@@ -91,6 +92,7 @@ enum TranscriptionEngine: String, CaseIterable, Identifiable {
     var displayName: String {
         switch self {
         case .appleSpeech: return "macOS Speech"
+        case .parakeet: return "Parakeet (NVIDIA)"
         case .whisper: return "Whisper (download)"
         }
     }
@@ -99,14 +101,17 @@ enum TranscriptionEngine: String, CaseIterable, Identifiable {
         switch self {
         case .appleSpeech:
             return "Built into macOS · zero download · live partials · no translate"
+        case .parakeet:
+            return "NVIDIA Parakeet TDT · very fast local dictation · EN + multilingual · no translate"
         case .whisper:
-            return "Open-source · download model · best accuracy · translate"
+            return "Open-source · download model · strong multilingual + translate"
         }
     }
 
     var icon: String {
         switch self {
         case .appleSpeech: return "apple.logo"
+        case .parakeet: return "bolt.horizontal.circle"
         case .whisper: return "arrow.down.circle"
         }
     }

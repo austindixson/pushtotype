@@ -11,13 +11,15 @@
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>NotFluid</string>
+	<string>PushToType</string>
 	<key>CFBundleDisplayName</key>
-	<string>n0tfluid</string>
+	<string>PushToType</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.1.0</string>
+	<string>1.0.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>
@@ -27,11 +29,11 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>n0tfluid needs the microphone to dictate speech into text on your Mac. Audio is processed locally and never uploaded.</string>
+	<string>PushToType needs the microphone to dictate speech into text on your Mac. Audio is processed locally and never uploaded.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>n0tfluid can use macOS Speech for zero-download on-device dictation. Recognition stays on your Mac when on-device mode is available.</string>
+	<string>PushToType can use macOS Speech for zero-download on-device dictation. Recognition stays on your Mac when on-device mode is available.</string>
 	<key>NSAppleEventsUsageDescription</key>
-	<string>n0tfluid pastes dictated text into the app you're typing in.</string>
+	<string>PushToType pastes dictated text into the app you're typing in.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoadsInWebContent</key>

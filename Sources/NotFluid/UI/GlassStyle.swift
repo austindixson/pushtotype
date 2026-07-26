@@ -6,7 +6,7 @@ enum GlassTheme {
     static let cornerLarge: CGFloat = 20
     static let cornerMedium: CGFloat = 14
     static let cornerSmall: CGFloat = 10
-    static let panelWidth: CGFloat = 352
+    static let panelWidth: CGFloat = 368
 
     /// Specular rim like macOS HUD / Control Center.
     static var strokeGradient: LinearGradient {

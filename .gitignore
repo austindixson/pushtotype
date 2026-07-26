@@ -27,3 +27,4 @@ Models/*.mlmodelc
 *.pem
 *.p12
 benchmark-boost-last.txt
+Resources/AppIcon.iconset/

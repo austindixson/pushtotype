@@ -84,26 +84,30 @@ actor WhisperService {
 
         let modelPath = try resolveModelPath(model)
 
-        // Normalize to 16 kHz mono 16-bit if needed (handles odd container quirks)
+        // Capture already converts to 16 kHz mono — skip a second ffmpeg (saves ~50–150ms)
         let wavURL = try await ensureWhisperFriendlyWAV(audioURL)
+
+        // Short push-to-talk clips: greedy decode + pinned language is much faster than full beam/auto
+        let lang = (language == "auto" || language.isEmpty) ? "auto" : language
+        let threads = max(2, min(6, ProcessInfo.processInfo.activeProcessorCount - 1))
 
         var args: [String] = [
             "-m", modelPath.path,
             "-f", wavURL.path,
             "-nt",
             "-np",
-            "-t", "\(max(1, ProcessInfo.processInfo.activeProcessorCount - 1))",
-            "-l", language == "auto" ? "auto" : language,
-            // Reduce silence hallucinations ("you", "thank you", etc.)
+            "-t", "\(threads)",
+            "-l", lang,
+            // Greedy (beam 1) — big win on short dictation; accuracy still solid for speech
+            "-bs", "1",
             "-nth", "0.5",
-            "-lpt", "-1.0"
+            "-lpt", "-1.0",
+            "-sns"
         ]
 
         if mode == .translate {
             args.append("-tr")
         }
-        // Fewer junk tokens on short dictation clips
-        args.append(contentsOf: ["-sns", "--prompt", "Dictation:"])
 
         let outBase = FileManager.default.temporaryDirectory
             .appendingPathComponent("notfluid-out-\(UUID().uuidString)")
@@ -149,8 +153,18 @@ actor WhisperService {
         return cleaned
     }
 
-    /// ffmpeg re-encode to classic s16le 16k mono wav when available.
+    /// Only re-encode if capture didn't already produce a 16 kHz mono WAV.
     private func ensureWhisperFriendlyWAV(_ url: URL) async throws -> URL {
+        let name = url.lastPathComponent
+        // AudioCaptureService names converted files `notfluid-16k-*.wav`
+        if name.hasPrefix("notfluid-16k-"), name.hasSuffix(".wav") {
+            return url
+        }
+        // Already a wav that might be fine — still convert CAF/other containers once
+        if name.hasSuffix(".wav"), name.contains("16k") {
+            return url
+        }
+
         guard let ffmpeg = which("ffmpeg") ?? (
             FileManager.default.isExecutableFile(atPath: "/opt/homebrew/bin/ffmpeg")
             ? "/opt/homebrew/bin/ffmpeg" : nil
@@ -162,7 +176,8 @@ actor WhisperService {
         let result = try await runProcess(
             binary: URL(fileURLWithPath: ffmpeg),
             arguments: [
-                "-y", "-i", url.path,
+                "-y", "-hide_banner", "-loglevel", "error",
+                "-i", url.path,
                 "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
                 out.path
             ]
@@ -219,10 +234,11 @@ actor WhisperService {
             }
             dir.deleteLastPathComponent()
         }
-        // Desktop project path
-        let desktop = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Desktop/n0tfluid/Models")
-        if FileManager.default.fileExists(atPath: desktop.path) { return desktop }
+        let home = FileManager.default.homeDirectoryForCurrentUser
+        for rel in ["Desktop/PushToType/Models", "Desktop/n0tfluid/Models"] {
+            let candidate = home.appendingPathComponent(rel)
+            if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
+        }
         return nil
     }
 

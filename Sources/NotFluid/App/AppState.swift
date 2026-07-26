@@ -31,6 +31,7 @@ final class AppState: ObservableObject {
     @AppStorage("mode") var modeRaw: String = DictationMode.transcribe.rawValue
     @AppStorage("transcriptionEngine") var transcriptionEngineRaw: String = TranscriptionEngine.appleSpeech.rawValue
     @AppStorage("modelID") var modelID: String = WhisperModel.small.rawValue
+    @AppStorage("parakeetModelID") var parakeetModelID: String = ParakeetModel.tdt06bV2.rawValue
     @AppStorage("speedPreset") var speedPresetRaw: String = SpeedPreset.balanced.rawValue
     @AppStorage("autoPaste") var autoPaste = true
     @AppStorage("playSounds") var playSounds = false
@@ -38,6 +39,8 @@ final class AppState: ObservableObject {
     @AppStorage("livePartials") var livePartials = true
     @AppStorage("overlayPosition") var overlayPositionRaw: String = OverlayPosition.top.rawValue
     @AppStorage("language") var language: String = "auto"
+    @Published var parakeetInstallBusy = false
+    @Published var parakeetInstallLog = ""
 
     var overlayPosition: OverlayPosition {
         get { OverlayPosition(rawValue: overlayPositionRaw) ?? .top }
@@ -57,12 +60,16 @@ final class AppState: ObservableObject {
 
     var mode: DictationMode {
         get { DictationMode(rawValue: modeRaw) ?? .transcribe }
-        set { modeRaw = newValue.rawValue }
+        set {
+            objectWillChange.send()
+            modeRaw = newValue.rawValue
+        }
     }
 
     var hotkeyPreset: HotkeyPreset {
         get { HotkeyPreset(rawValue: hotkeyPresetRaw) ?? .rightOption }
         set {
+            objectWillChange.send()
             hotkeyPresetRaw = newValue.rawValue
             rebindHotkey()
         }
@@ -71,6 +78,7 @@ final class AppState: ObservableObject {
     var speedPreset: SpeedPreset {
         get { SpeedPreset(rawValue: speedPresetRaw) ?? .balanced }
         set {
+            objectWillChange.send()
             speedPresetRaw = newValue.rawValue
             applySpeedPreset(newValue)
         }
@@ -79,6 +87,8 @@ final class AppState: ObservableObject {
     var transcriptionEngine: TranscriptionEngine {
         get { TranscriptionEngine(rawValue: transcriptionEngineRaw) ?? .appleSpeech }
         set {
+            guard newValue.rawValue != transcriptionEngineRaw else { return }
+            objectWillChange.send()
             transcriptionEngineRaw = newValue.rawValue
             Task { await refreshModelStatus() }
         }
@@ -86,9 +96,20 @@ final class AppState: ObservableObject {
 
     var selectedModel: WhisperModel {
         get { WhisperModel(rawValue: modelID) ?? .small }
-        set { modelID = newValue.rawValue }
+        set {
+            objectWillChange.send()
+            modelID = newValue.rawValue
+        }
     }
 
+    var selectedParakeetModel: ParakeetModel {
+        get { ParakeetModel(rawValue: parakeetModelID) ?? .tdt06bV2 }
+        set {
+            objectWillChange.send()
+            parakeetModelID = newValue.rawValue
+            Task { await refreshModelStatus() }
+        }
+    }
 
     var filteredHistory: [DictationEntry] {
         let q = historyFilter.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -104,6 +125,7 @@ final class AppState: ObservableObject {
     let audio = AudioCaptureService()
     let whisper = WhisperService()
     let appleSpeech = AppleSpeechService()
+    let parakeet = ParakeetService()
     let injector = TextInjector()
     let hotkey = HotkeyService()
     let dictionary = DictionaryStore.shared
@@ -147,14 +169,18 @@ final class AppState: ObservableObject {
 
         Task {
             await refreshModelStatus()
-            if self.warmModelOnLaunch, self.transcriptionEngine == .whisper {
-                await self.warmWhisper()
+            if self.warmModelOnLaunch {
+                if self.transcriptionEngine == .whisper {
+                    await self.warmWhisper()
+                } else if self.transcriptionEngine == .parakeet {
+                    await self.warmParakeet()
+                }
             }
         }
 
+        // Quiet status only — never auto-prompt if already granted (or even if missing on launch)
         if !permissions.accessibility {
-            TextInjector.requestAccessibilityPrompt()
-            statusText = "Enable Accessibility to paste at cursor"
+            statusText = "Hold \(hotkeyPreset.displayName) to dictate"
         }
     }
 
@@ -201,6 +227,10 @@ final class AppState: ObservableObject {
             let status = await whisper.ensureReady(model: selectedModel)
             modelReady = status.ready
             modelStatus = status.message
+        case .parakeet:
+            let status = await parakeet.ensureReady(model: selectedParakeetModel)
+            modelReady = status.ready
+            modelStatus = status.message
         }
         if !modelReady { statusText = modelStatus }
     }
@@ -214,6 +244,12 @@ final class AppState: ObservableObject {
         modelStatus = status.ready ? "\(selectedModel.displayName) warm" : status.message
     }
 
+    func warmParakeet() async {
+        guard transcriptionEngine == .parakeet else { return }
+        modelStatus = "Warming Parakeet…"
+        await parakeet.warm(model: selectedParakeetModel)
+        await refreshModelStatus()
+    }
 
     func downloadWhisperModel(_ model: WhisperModel? = nil) {
         let m = model ?? selectedModel
@@ -228,6 +264,79 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Install Python venv + onnx-asr + download Parakeet ONNX models (one-time).
+    func installParakeetRuntime() {
+        guard !parakeetInstallBusy else { return }
+        parakeetInstallBusy = true
+        parakeetInstallLog = "Starting Parakeet setup…"
+        modelStatus = "Installing Parakeet…"
+
+        var scriptCandidates: [String] = []
+        if let bundled = Bundle.main.resourceURL?.appendingPathComponent("setup-parakeet.sh").path {
+            scriptCandidates.append(bundled)
+        }
+        scriptCandidates.append(
+            FileManager.default.homeDirectoryForCurrentUser
+                .appendingPathComponent("Desktop/PushToType/scripts/setup-parakeet.sh").path
+        )
+        scriptCandidates.append(FileManager.default.currentDirectoryPath + "/scripts/setup-parakeet.sh")
+
+        guard let script = scriptCandidates.first(where: { FileManager.default.fileExists(atPath: $0) }) else {
+            parakeetInstallBusy = false
+            parakeetInstallLog = "setup-parakeet.sh not found"
+            errorMessage = parakeetInstallLog
+            return
+        }
+
+        // Prefer project Resources worker for setup copy
+        Task.detached { [weak self] in
+            let proc = Process()
+            proc.executableURL = URL(fileURLWithPath: "/bin/bash")
+            proc.arguments = [script]
+            // setup-parakeet.sh resolves worker relative to repo; if run from bundle Resources,
+            // also ensure Application Support gets the bundled worker after setup.
+            let out = Pipe()
+            proc.standardOutput = out
+            proc.standardError = out
+            do {
+                try proc.run()
+                // Stream log
+                while proc.isRunning {
+                    let data = out.fileHandleForReading.availableData
+                    if !data.isEmpty, let s = String(data: data, encoding: .utf8) {
+                        await MainActor.run {
+                            self?.parakeetInstallLog += s
+                            self?.modelDownloadStatus = s.split(separator: "\n").last.map(String.init) ?? ""
+                        }
+                    }
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+                let rest = out.fileHandleForReading.readDataToEndOfFile()
+                if let s = String(data: rest, encoding: .utf8), !s.isEmpty {
+                    await MainActor.run { self?.parakeetInstallLog += s }
+                }
+                let code = proc.terminationStatus
+                await MainActor.run {
+                    self?.parakeetInstallBusy = false
+                    if code == 0 {
+                        self?.modelStatus = "Parakeet installed"
+                        self?.errorMessage = nil
+                        self?.transcriptionEngine = .parakeet
+                        Task { await self?.refreshModelStatus(); await self?.warmParakeet() }
+                    } else {
+                        self?.errorMessage = "Parakeet install failed (exit \(code)) — see log in Settings"
+                        self?.modelStatus = "Parakeet install failed"
+                    }
+                }
+            } catch {
+                await MainActor.run {
+                    self?.parakeetInstallBusy = false
+                    self?.errorMessage = error.localizedDescription
+                }
+            }
+        }
+    }
+
     // MARK: - Dictation
 
     func startDictation() {
@@ -238,7 +347,7 @@ final class AppState: ObservableObject {
         livePreview = ""
         rewriteSourceText = nil
 
-        if mode == .translate && transcriptionEngine == .appleSpeech {
+        if mode == .translate && transcriptionEngine != .whisper {
             errorMessage = "Translate needs Whisper — switch engine in Settings."
             statusText = "Translate needs Whisper"
             return
@@ -291,6 +400,7 @@ final class AppState: ObservableObject {
         let thisSession = sessionID
         let engine = transcriptionEngine
         let whisperModel = selectedModel
+        let parakeetModel = selectedParakeetModel
         let dictationMode = mode
         let lang = language
         let wantPaste = autoPaste
@@ -323,15 +433,19 @@ final class AppState: ObservableObject {
             }
 
             do {
-                self.statusText = engine == .whisper ? "Transcribing with Whisper…" : "Transcribing with macOS Speech…"
+                self.statusText = engine == .whisper ? "Transcribing…" : "Transcribing…"
 
                 let sttMode: DictationMode = (dictationMode == .rewrite || dictationMode == .articulate)
                     ? .transcribe : dictationMode
+
+                // Prefer live partial as a head-start display while Whisper runs
+                // (final STT still overwrites with the accurate result)
 
                 var text = try await self.transcribeAudio(
                     at: sampleURL,
                     engine: engine,
                     whisperModel: whisperModel,
+                    parakeetModel: parakeetModel,
                     mode: sttMode,
                     language: lang
                 )
@@ -398,9 +512,10 @@ final class AppState: ObservableObject {
 
                 if wantPaste {
                     let intoTerminal = self.injector.isTerminalTarget()
-                    self.statusText = intoTerminal ? "Pasting…" : "Inserting…"
+                    let targetName = self.injector.targetApp?.localizedName ?? "app"
+                    self.statusText = intoTerminal ? "Pasting into \(targetName)…" : "Inserting into \(targetName)…"
                     self.livePreview = text
-                    // Keep text visible; only lower our activation so target app gets paste
+                    // Hide overlay fully before paste so Grok Build / Terminal keep focus
                     self.showOverlay = false
                     self.overlay?.hide()
                     NSApp.deactivate()
@@ -413,7 +528,6 @@ final class AppState: ObservableObject {
                         method = .accessibility
                     }
 
-                    // Show complete output again after paste
                     self.livePreview = text
                     if self.showLiveOverlay {
                         self.showOverlay = true
@@ -422,17 +536,23 @@ final class AppState: ObservableObject {
                     }
 
                     switch method {
-                    case .accessibility, .appleScriptPaste, .terminalPaste:
-                        self.statusText = intoTerminal ? "Pasted ✓" : "Inserted ✓"
+                    case .accessibility, .appleScriptPaste, .terminalPaste, .typedText:
+                        self.statusText = intoTerminal
+                            ? "Pasted into \(targetName) ✓"
+                            : "Inserted into \(targetName) ✓"
                         self.errorMessage = nil
                     case .clipboardPaste:
-                        self.statusText = "Sent paste — ⌘V if missing"
+                        self.statusText = "Sent paste to \(targetName)"
+                        self.errorMessage = nil
                     case .clipboardOnly, .none:
-                        self.statusText = "Press ⌘V to paste"
-                        self.errorMessage = "Enable Accessibility for NotFluid"
-                        TextInjector.requestAccessibilityPrompt()
+                        self.statusText = "Copied — press ⌘V in \(targetName)"
+                        if let detail = self.injector.lastErrorDetail {
+                            self.errorMessage = detail
+                        } else if !TextInjector.accessibilityGranted() {
+                            self.errorMessage = "Accessibility not granted (menu → Access)"
+                        }
                     }
-                    self.keepOverlayBrieflyThenHide(seconds: 2.5)
+                    self.keepOverlayBrieflyThenHide(seconds: 1.5)
                 } else {
                     self.statusText = "Copied"
                     if self.showLiveOverlay {
@@ -481,7 +601,7 @@ final class AppState: ObservableObject {
         await withCheckedContinuation { cont in
             injector.insertAfterDelay(
                 text,
-                delay: 0.04,
+                delay: 0.05,
                 prepareFocus: { [weak self] in
                     self?.overlay?.hide()
                     self?.showOverlay = false
@@ -506,6 +626,7 @@ final class AppState: ObservableObject {
         at url: URL,
         engine: TranscriptionEngine,
         whisperModel: WhisperModel,
+        parakeetModel: ParakeetModel,
         mode: DictationMode,
         language: String
     ) async throws -> String {
@@ -516,6 +637,13 @@ final class AppState: ObservableObject {
             return try await whisper.transcribe(
                 audioURL: url,
                 model: whisperModel,
+                mode: mode,
+                language: language
+            )
+        case .parakeet:
+            return try await parakeet.transcribe(
+                audioURL: url,
+                model: parakeetModel,
                 mode: mode,
                 language: language
             )

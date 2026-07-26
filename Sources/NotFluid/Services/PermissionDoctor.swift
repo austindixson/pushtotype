@@ -33,8 +33,10 @@ enum PermissionDoctor {
         SFSpeechRecognizer.requestAuthorization { _ in }
     }
 
+    /// User-initiated only. No-ops when already trusted.
     static func requestAccessibility() {
-        TextInjector.requestAccessibilityPrompt()
+        if AXIsProcessTrusted() { return }
+        _ = TextInjector.requestAccessibilityPromptIfNeeded(force: true)
     }
 
     static func openMicrophoneSettings() {
@@ -49,7 +51,9 @@ enum PermissionDoctor {
         }
     }
 
+    /// Opens Settings only when Accessibility is actually missing.
     static func openAccessibilitySettings() {
+        guard !AXIsProcessTrusted() else { return }
         TextInjector.openAccessibilitySettings()
     }
 }

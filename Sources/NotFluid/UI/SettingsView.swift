@@ -114,7 +114,8 @@ struct SettingsView: View {
                 }
             }
 
-            if appState.transcriptionEngine == .whisper {
+            switch appState.transcriptionEngine {
+            case .whisper:
                 Section("Speed preset") {
                     Picker("Preset", selection: Binding(
                         get: { appState.speedPreset },
@@ -127,7 +128,7 @@ struct SettingsView: View {
                     Text(appState.speedPreset.detail)
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Toggle("Warm Whisper on launch", isOn: $appState.warmModelOnLaunch)
+                    Toggle("Warm model on launch", isOn: $appState.warmModelOnLaunch)
                 }
 
                 Section("Whisper model") {
@@ -166,7 +167,56 @@ struct SettingsView: View {
                         }
                     }
                 }
-            } else {
+
+            case .parakeet:
+                Section("Parakeet (NVIDIA)") {
+                    Text("Fast local dictation via onnx-asr. One-time setup downloads a Python runtime + ONNX models (~0.5–1 GB).")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Picker("Model", selection: Binding(
+                        get: { appState.selectedParakeetModel },
+                        set: { appState.selectedParakeetModel = $0 }
+                    )) {
+                        ForEach(ParakeetModel.allCases) { Text($0.displayName).tag($0) }
+                    }
+                    Text(appState.selectedParakeetModel.detail)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Toggle("Warm Parakeet on launch", isOn: $appState.warmModelOnLaunch)
+
+                    if appState.parakeetInstallBusy {
+                        ProgressView {
+                            Text("Installing… first run can take several minutes")
+                                .font(.caption)
+                        }
+                    }
+
+                    Button(appState.parakeetInstallBusy ? "Installing…" : "Install / update Parakeet runtime") {
+                        appState.installParakeetRuntime()
+                    }
+                    .disabled(appState.parakeetInstallBusy)
+
+                    Button("Recheck / warm") {
+                        Task {
+                            await appState.refreshModelStatus()
+                            await appState.warmParakeet()
+                        }
+                    }
+                    .disabled(appState.parakeetInstallBusy)
+
+                    if !appState.parakeetInstallLog.isEmpty {
+                        ScrollView {
+                            Text(appState.parakeetInstallLog)
+                                .font(.system(.caption2, design: .monospaced))
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: 120)
+                    }
+                }
+
+            case .appleSpeech:
                 Section("macOS Speech") {
                     Text("Zero download. Grant Speech Recognition for live partials and final STT.")
                         .font(.caption)
@@ -237,10 +287,13 @@ struct SettingsView: View {
             }
             Section("Fix") {
                 Button("Request Microphone") { PermissionDoctor.requestMicrophone() }
-                Button("Request Accessibility") {
-                    PermissionDoctor.requestAccessibility()
-                    PermissionDoctor.openAccessibilitySettings()
+                Button(appState.permissions.accessibility ? "Accessibility granted ✓" : "Request Accessibility") {
+                    if !appState.permissions.accessibility {
+                        PermissionDoctor.requestAccessibility()
+                        PermissionDoctor.openAccessibilitySettings()
+                    }
                 }
+                .disabled(appState.permissions.accessibility)
                 Button("Request Speech Recognition") { PermissionDoctor.requestSpeech() }
                 Button("Open Privacy Settings") {
                     if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy") {
@@ -249,7 +302,7 @@ struct SettingsView: View {
                 }
             }
             Section {
-                Text("Ad-hoc builds get a new code signature each compile — re-enable Accessibility after ./scripts/build-app.sh. Use scripts/sign-stable.sh when you have an Apple Development cert.")
+                Text("Accessibility is checked quietly. System prompts only appear if permission is missing and you request it.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -261,14 +314,13 @@ struct SettingsView: View {
 
     private var aboutTab: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("n0tfluid").font(.title2.weight(.bold))
+            Text("PushToType").font(.title2.weight(.bold))
             Text("Local Mac dictation — Whisper or macOS Speech, Terminal-aware paste, smart punctuation, live partials.")
                 .foregroundStyle(.secondary)
             Divider()
             Group {
                 Text("Hotkey: \(appState.hotkeyPreset.displayName)")
                 Text("Engine: \(appState.transcriptionEngine.displayName)")
-                Text("See BUILD_PLAN.md for the full roadmap")
             }
             .font(.callout)
             Spacer()
@@ -278,5 +330,60 @@ struct SettingsView: View {
         }
         .padding(24)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+}
+
+// MARK: - Window host (menu-bar apps can't rely on showSettingsWindow:)
+
+/// Opens Settings as a real key window. Accessory (`LSUIElement`) apps ignore
+/// `showSettingsWindow:` / Settings scene presentation unless activated as regular.
+@MainActor
+final class SettingsWindowController: NSObject, NSWindowDelegate {
+    static let shared = SettingsWindowController()
+    private var window: NSWindow?
+
+    func show(appState: AppState) {
+        if let window, window.isVisible {
+            bringToFront(window)
+            return
+        }
+
+        let root = SettingsView()
+            .environmentObject(appState)
+        let host = NSHostingView(rootView: root)
+        host.frame = NSRect(x: 0, y: 0, width: 600, height: 500)
+
+        let win = NSWindow(
+            contentRect: host.frame,
+            styleMask: [.titled, .closable, .miniaturizable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        win.title = "PushToType Settings"
+        win.titlebarAppearsTransparent = false
+        win.isReleasedWhenClosed = false
+        win.contentView = host
+        win.center()
+        win.delegate = self
+        win.isOpaque = true
+        win.backgroundColor = NSColor.windowBackgroundColor
+        window = win
+        bringToFront(win)
+    }
+
+    private func bringToFront(_ win: NSWindow) {
+        // Accessory apps need a brief regular activation so the window can key
+        NSApp.setActivationPolicy(.regular)
+        win.makeKeyAndOrderFront(nil)
+        win.orderFrontRegardless()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        window = nil
+        // Return to menu-bar-only presence after a beat so MenuBarExtra stays healthy
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            NSApp.setActivationPolicy(.accessory)
+        }
     }
 }
