@@ -178,21 +178,21 @@ final class TextInjector {
     func copyToClipboard(_ text: String) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        // Plain-text only — HTML on the board can make contenteditable forms paste markup.
+        // writeObjects is the modern path Chrome/X.com actually read on paste.
+        _ = pb.writeObjects([text as NSString])
+        // Extra plain-text types for picky web editors (Draft.js / Lexical).
         let utf8 = NSPasteboard.PasteboardType("public.utf8-plain-text")
-        let plain = NSPasteboard.PasteboardType("public.plain-text")
-        pb.declareTypes([.string, utf8, plain], owner: nil)
         _ = pb.setString(text, forType: .string)
         _ = pb.setData(Data(text.utf8), forType: utf8)
-        _ = pb.setString(text, forType: plain)
+        _ = pb.setString(text, forType: NSPasteboard.PasteboardType("public.plain-text"))
     }
 
     func paste(_ text: String) {
         insertAfterDelay(text)
     }
 
-    /// Fast path: copy → clear PTT modifiers → activate → paste.
-    /// Aim for ~40–120ms after release when modifiers are already up.
+    /// Fast path: copy → clear PTT modifiers → activate → paste/type.
+    /// Browsers (Grok/ChatGPT contenteditable) get paste + verified type fallback.
     func insertAfterDelay(
         _ text: String,
         delay: TimeInterval = 0.02,
@@ -212,25 +212,35 @@ final class TextInjector {
 
         let terminal = isTerminalTarget()
         let pid = targetApp?.processIdentifier
-
         let browserish = prefersClipboardPaste()
+
         let runInsert = {
-            self.forceActivateTarget()
-            // Browsers / webviews need a brief focus settle or ⌘V lands nowhere.
-            // Terminals need a hair more than native AX apps.
+            // Don't bounce an already-frontmost browser — that drops the X.com caret.
+            self.forceActivateTarget(onlyIfNeeded: browserish)
+
             let settle: TimeInterval
             if browserish {
-                settle = 0.08
+                settle = 0.2
             } else if terminal {
                 settle = 0.03
             } else {
                 settle = 0.02
             }
+
             let finish = {
                 self.copyToClipboard(text)
-                let method = self.insertNow(text, pid: pid ?? self.targetApp?.processIdentifier)
-                self.lastMethod = method
-                completion?(method)
+                let targetPID = pid ?? self.targetApp?.processIdentifier
+
+                if browserish {
+                    self.insertIntoBrowser(text, pid: targetPID) { method in
+                        self.lastMethod = method
+                        completion?(method)
+                    }
+                } else {
+                    let method = self.insertNow(text, pid: targetPID)
+                    self.lastMethod = method
+                    completion?(method)
+                }
             }
             if settle > 0 {
                 DispatchQueue.main.asyncAfter(deadline: .now() + settle, execute: finish)
@@ -240,12 +250,12 @@ final class TextInjector {
         }
 
         let afterDelay = {
-            // Only poll if Option is still physically down (Right-⌥ PTT)
+            // PTT (Right-⌥) must be fully up — Option+⌘V is not paste.
             let flags = NSEvent.modifierFlags.intersection([.command, .option, .control, .shift])
             if flags.isEmpty {
                 runInsert()
             } else {
-                self.waitForClearModifiers(maxWait: 0.12, then: runInsert)
+                self.waitForClearModifiers(maxWait: 0.5, then: runInsert)
             }
         }
 
@@ -261,11 +271,25 @@ final class TextInjector {
         ensurePasteTarget()
         copyToClipboard(text)
         if activateTarget {
-            forceActivateTarget()
-            Thread.sleep(forTimeInterval: 0.06)
+            forceActivateTarget(onlyIfNeeded: prefersClipboardPaste())
+            Thread.sleep(forTimeInterval: prefersClipboardPaste() ? 0.12 : 0.06)
         }
         copyToClipboard(text)
-        let method = insertNow(text, pid: targetApp?.processIdentifier) ?? .clipboardOnly
+        let pid = targetApp?.processIdentifier
+        // Sync browser path: same paste strategy as async (not Unicode — X.com ignores it).
+        if prefersClipboardPaste() {
+            neutralizeModifiers(to: pid, delivery: .session)
+            refocusFocusedElement(pid: pid)
+            copyToClipboard(text)
+            if pasteViaSystemEvents() {
+                lastMethod = .appleScriptPaste
+                return .appleScriptPaste
+            }
+            performPasteKeystroke(to: pid, delivery: .session)
+            lastMethod = .clipboardPaste
+            return .clipboardPaste
+        }
+        let method = insertNow(text, pid: pid) ?? .clipboardOnly
         lastMethod = method
         return method
     }
@@ -291,11 +315,17 @@ final class TextInjector {
         rememberTargetApp()
     }
 
-    private func forceActivateTarget() {
-        if NSApp.isActive { NSApp.deactivate() }
+    private func forceActivateTarget(onlyIfNeeded: Bool = false) {
         ensurePasteTarget()
         guard let app = targetApp, !app.isTerminated else { return }
-        // Yield so a menu-bar / accessory app can hand frontmost to the browser cleanly (macOS 14+).
+
+        let alreadyFront = NSWorkspace.shared.frontmostApplication?.processIdentifier == app.processIdentifier
+        if onlyIfNeeded && alreadyFront && !NSApp.isActive {
+            return
+        }
+
+        if NSApp.isActive { NSApp.deactivate() }
+        // Yield so a menu-bar / accessory app can hand frontmost cleanly (macOS 14+).
         NSApp.yieldActivation(to: app)
         app.activate()
         let appEl = AXUIElementCreateApplication(app.processIdentifier)
@@ -312,8 +342,7 @@ final class TextInjector {
             return insertIntoTerminalOrTUI(text, pid: pid)
         }
 
-        // Browsers / Electron / webviews: skip AX. Setting AX value often reports
-        // success without inserting at the caret in form fields / contenteditable.
+        // Browsers should use the async path (insertIntoBrowser). Sync callers still paste.
         if prefersClipboardPaste() {
             return insertViaClipboardPaste(text, pid: pid)
         }
@@ -331,7 +360,7 @@ final class TextInjector {
         let pid = pid ?? targetApp?.processIdentifier
         copyToClipboard(text)
         neutralizeModifiers(to: pid, delivery: .pid)
-        forceActivateTarget()
+        forceActivateTarget(onlyIfNeeded: true)
         copyToClipboard(text)
 
         neutralizeModifiers(to: pid, delivery: .pid)
@@ -339,16 +368,151 @@ final class TextInjector {
         return .terminalPaste
     }
 
-    /// Clipboard + real ⌘V — best path for browser forms and most GUI apps.
-    /// Uses session HID events (same as a physical keyboard) so Chromium/WebKit form
-    /// fields actually receive the paste; PID-only posts often never reach the caret.
+    /// Clipboard + ⌘V for native apps / sync callers.
     private func insertViaClipboardPaste(_ text: String, pid: pid_t?) -> InsertMethod {
         let pid = pid ?? targetApp?.processIdentifier
-        forceActivateTarget()
+        forceActivateTarget(onlyIfNeeded: true)
         copyToClipboard(text)
         neutralizeModifiers(to: pid, delivery: .session)
         performPasteKeystroke(to: pid, delivery: .session)
         return Self.accessibilityGranted() ? .clipboardPaste : .clipboardOnly
+    }
+
+    /// X.com / Grok / ChatGPT / Draft.js / Lexical path.
+    ///
+    /// These editors want a real paste event. Unicode key synthesis is ignored.
+    /// Primary: System Events ⌘V (same path Keyboard Maestro uses for Chrome).
+    /// Fallback: timed CGEvent ⌘V chord (single tap — never double-post one event).
+    private func insertIntoBrowser(_ text: String, pid: pid_t?, completion: @escaping (InsertMethod?) -> Void) {
+        let pid = pid ?? targetApp?.processIdentifier
+
+        guard Self.accessibilityGranted() else {
+            copyToClipboard(text)
+            lastErrorDetail = "Accessibility not granted — required to paste into browsers"
+            completion(.clipboardOnly)
+            return
+        }
+
+        copyToClipboard(text)
+        neutralizeModifiers(to: pid, delivery: .session)
+        refocusFocusedElement(pid: pid)
+        // Clipboard again right before paste — Chrome reads at keystroke time.
+        copyToClipboard(text)
+
+        // 1) System Events (most reliable into Chrome / X.com contenteditable)
+        if pasteViaSystemEvents() {
+            completion(.appleScriptPaste)
+            return
+        }
+
+        // 2) CGEvent timed chord
+        performPasteKeystrokeTimed(to: pid, delivery: .session) {
+            completion(.clipboardPaste)
+        }
+    }
+
+    // MARK: - Focus / verify helpers
+
+    private struct TextSnapshot {
+        var value: String?
+        var selected: String?
+    }
+
+    private func focusedElement(pid: pid_t?) -> AXUIElement? {
+        if let pid {
+            let appEl = AXUIElementCreateApplication(pid)
+            var focusedRef: CFTypeRef?
+            if AXUIElementCopyAttributeValue(
+                appEl,
+                kAXFocusedUIElementAttribute as CFString,
+                &focusedRef
+            ) == .success, let focusedRef {
+                return (focusedRef as! AXUIElement)
+            }
+        }
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+            systemWide,
+            kAXFocusedUIElementAttribute as CFString,
+            &focusedRef
+        ) == .success, let focusedRef else { return nil }
+        let focused = focusedRef as! AXUIElement
+        var elPid: pid_t = 0
+        if AXUIElementGetPid(focused, &elPid) == .success,
+           elPid == ProcessInfo.processInfo.processIdentifier {
+            return nil
+        }
+        return focused
+    }
+
+    private func readFocusedTextSnapshot(pid: pid_t?) -> TextSnapshot {
+        guard let el = focusedElement(pid: pid) else { return TextSnapshot() }
+        var snap = TextSnapshot()
+        var valueRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(el, kAXValueAttribute as CFString, &valueRef) == .success {
+            if let s = valueRef as? String { snap.value = s }
+            else if let a = valueRef as? NSAttributedString { snap.value = a.string }
+        }
+        var selRef: CFTypeRef?
+        if AXUIElementCopyAttributeValue(el, kAXSelectedTextAttribute as CFString, &selRef) == .success {
+            if let s = selRef as? String { snap.selected = s }
+        }
+        return snap
+    }
+
+    /// Ask the browser to keep keyboard focus on its current AX focused element.
+    /// (Do not AX-press — that can activate buttons near chat composers.)
+    private func refocusFocusedElement(pid: pid_t?) {
+        guard let el = focusedElement(pid: pid) else { return }
+        AXUIElementSetAttributeValue(el, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    }
+
+    @discardableResult
+    private func pasteViaSystemEvents() -> Bool {
+        // Prefer unix id — process name is ambiguous ("Google Chrome" vs "Chrome").
+        let pid = targetApp?.processIdentifier
+        let source: String
+        if let pid {
+            source = """
+            tell application "System Events"
+              try
+                set p to first process whose unix id is \(pid)
+                set frontmost of p to true
+                delay 0.08
+                keystroke "v" using command down
+                return true
+              on error
+                return false
+              end try
+            end tell
+            """
+        } else if let name = targetApp?.localizedName, !name.isEmpty {
+            let proc = name.replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            source = """
+            tell application "System Events"
+              try
+                set frontmost of process "\(proc)" to true
+                delay 0.08
+                keystroke "v" using command down
+                return true
+              on error
+                return false
+              end try
+            end tell
+            """
+        } else {
+            return false
+        }
+        var error: NSDictionary?
+        guard let script = NSAppleScript(source: source) else { return false }
+        let result = script.executeAndReturnError(&error)
+        if let error {
+            lastErrorDetail = "System Events paste failed: \(error)"
+            return false
+        }
+        return result.booleanValue || (result.stringValue?.lowercased() != "false")
     }
 
     // MARK: - CGEvent helpers
@@ -358,11 +522,14 @@ final class TextInjector {
         case pid
         /// Session-wide HID tap — required for browsers after the target is frontmost.
         case session
+        /// Both: PID first, then a *fresh* session event (never post one CGEvent twice).
+        case pidThenSession
     }
 
     private func makeEventSource() -> CGEventSource? {
-        // hidSystemState avoids inheriting sticky Option/Command from the PTT release.
-        let source = CGEventSource(stateID: .hidSystemState)
+        // combinedSessionState matches a real keyboard more closely for Chrome paste.
+        // (hidSystemState alone is often dropped by Chromium for ⌘V.)
+        let source = CGEventSource(stateID: .combinedSessionState)
         source?.localEventsSuppressionInterval = 0
         return source
     }
@@ -377,13 +544,44 @@ final class TextInjector {
                 event.post(tap: .cghidEventTap)
             }
         case .session:
-            // Frontmost app receives this; forceActivateTarget() must run first.
+            // One tap only — posting the same CGEvent twice is undefined and breaks Chrome chords.
             event.post(tap: .cghidEventTap)
+        case .pidThenSession:
+            if let pid {
+                event.postToPid(pid)
+            } else {
+                event.post(tap: .cghidEventTap)
+            }
+        }
+    }
+
+    private func postKey(
+        virtualKey: CGKeyCode,
+        keyDown: Bool,
+        flags: CGEventFlags,
+        pid: pid_t?,
+        delivery: EventDelivery
+    ) {
+        let source = makeEventSource()
+        switch delivery {
+        case .pid, .session:
+            if let e = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: keyDown) {
+                e.flags = flags
+                post(e, to: pid, delivery: delivery)
+            }
+        case .pidThenSession:
+            if let pid, let e = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: keyDown) {
+                e.flags = flags
+                post(e, to: pid, delivery: .pid)
+            }
+            if let e = CGEvent(keyboardEventSource: source, virtualKey: virtualKey, keyDown: keyDown) {
+                e.flags = flags
+                post(e, to: pid, delivery: .session)
+            }
         }
     }
 
     private func neutralizeModifiers(to pid: pid_t?, delivery: EventDelivery = .session) {
-        let source = makeEventSource()
         let keys: [CGKeyCode] = [
             CGKeyCode(kVK_Option), CGKeyCode(kVK_RightOption),
             CGKeyCode(kVK_Command), CGKeyCode(kVK_RightCommand),
@@ -391,53 +589,70 @@ final class TextInjector {
             CGKeyCode(kVK_Shift), CGKeyCode(kVK_RightShift)
         ]
         for key in keys {
-            if let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) {
-                up.flags = []
-                post(up, to: pid, delivery: delivery)
-            }
+            postKey(virtualKey: key, keyDown: false, flags: [], pid: pid, delivery: delivery)
         }
     }
 
     private func performPasteKeystroke(to pid: pid_t?, delivery: EventDelivery = .session) {
-        let source = makeEventSource()
+        // Full ⌘-v chord — Chrome is more reliable with explicit ⌘ down/up than flag-only.
         let cmdKey = CGKeyCode(kVK_Command)
         let vKey = CGKeyCode(kVK_ANSI_V)
+        postKey(virtualKey: cmdKey, keyDown: true, flags: .maskCommand, pid: pid, delivery: delivery)
+        postKey(virtualKey: vKey, keyDown: true, flags: .maskCommand, pid: pid, delivery: delivery)
+        postKey(virtualKey: vKey, keyDown: false, flags: .maskCommand, pid: pid, delivery: delivery)
+        postKey(virtualKey: cmdKey, keyDown: false, flags: [], pid: pid, delivery: delivery)
+    }
 
-        // ⌘ down → v down → v up → ⌘ up (matches a real paste chord)
-        if let e = CGEvent(keyboardEventSource: source, virtualKey: cmdKey, keyDown: true) {
-            e.flags = .maskCommand
-            post(e, to: pid, delivery: delivery)
-        }
-        if let e = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true) {
-            e.flags = .maskCommand
-            post(e, to: pid, delivery: delivery)
-        }
-        if let e = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false) {
-            e.flags = .maskCommand
-            post(e, to: pid, delivery: delivery)
-        }
-        if let e = CGEvent(keyboardEventSource: source, virtualKey: cmdKey, keyDown: false) {
-            e.flags = []
-            post(e, to: pid, delivery: delivery)
+    /// Timed paste chord — Chrome / X.com often drop zero-delay synthetic chords.
+    private func performPasteKeystrokeTimed(
+        to pid: pid_t?,
+        delivery: EventDelivery = .session,
+        completion: @escaping () -> Void
+    ) {
+        let cmdKey = CGKeyCode(kVK_Command)
+        let vKey = CGKeyCode(kVK_ANSI_V)
+        let gap: TimeInterval = 0.012
+
+        postKey(virtualKey: cmdKey, keyDown: true, flags: .maskCommand, pid: pid, delivery: delivery)
+        DispatchQueue.main.asyncAfter(deadline: .now() + gap) {
+            self.postKey(virtualKey: vKey, keyDown: true, flags: .maskCommand, pid: pid, delivery: delivery)
+            DispatchQueue.main.asyncAfter(deadline: .now() + gap) {
+                self.postKey(virtualKey: vKey, keyDown: false, flags: .maskCommand, pid: pid, delivery: delivery)
+                DispatchQueue.main.asyncAfter(deadline: .now() + gap) {
+                    self.postKey(virtualKey: cmdKey, keyDown: false, flags: [], pid: pid, delivery: delivery)
+                    // Small tail so the host processes the chord before we continue.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.02, execute: completion)
+                }
+            }
         }
     }
 
+    /// Type text via Unicode keyboard events (up to 20 UTF-16 units per event).
+    /// This is what actually works in Grok / React contenteditable when ⌘V is ignored.
     @discardableResult
-    private func typeUnicode(to pid: pid_t?, text: String) -> Bool {
+    private func typeUnicode(to pid: pid_t?, text: String, delivery: EventDelivery = .session) -> Bool {
         let source = makeEventSource()
+        let units = Array(text.utf16)
+        guard !units.isEmpty else { return false }
         var ok = false
-        for scalar in text.utf16 {
-            var chars = [UniChar](repeating: 0, count: 1)
-            chars[0] = scalar
+        var index = 0
+        let chunk = 20 // CGEvent keyboardSetUnicodeString hard limit
+        while index < units.count {
+            let end = min(index + chunk, units.count)
+            var chars = Array(units[index..<end])
+            let len = chars.count
             if let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) {
-                down.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
-                post(down, to: pid, delivery: .session)
+                down.flags = []
+                down.keyboardSetUnicodeString(stringLength: len, unicodeString: &chars)
+                post(down, to: pid, delivery: delivery)
                 ok = true
             }
             if let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
-                up.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
-                post(up, to: pid, delivery: .session)
+                up.flags = []
+                up.keyboardSetUnicodeString(stringLength: len, unicodeString: &chars)
+                post(up, to: pid, delivery: .session == delivery ? .session : delivery)
             }
+            index = end
         }
         return ok
     }
