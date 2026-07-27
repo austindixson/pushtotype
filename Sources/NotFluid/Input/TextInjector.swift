@@ -46,6 +46,40 @@ final class TextInjector {
         "cursor", "code", "visual studio"
     ]
 
+    /// Browsers / webviews: AX insert is unreliable (caret, contenteditable, cross-process).
+    /// Prefer real clipboard ⌘V for these.
+    private static let browserBundleIDs: Set<String> = [
+        "com.apple.Safari",
+        "com.apple.SafariTechnologyPreview",
+        "com.google.Chrome",
+        "com.google.Chrome.canary",
+        "com.google.Chrome.beta",
+        "com.google.Chrome.dev",
+        "org.mozilla.firefox",
+        "org.mozilla.firefoxdeveloperedition",
+        "org.mozilla.nightly",
+        "company.thebrowser.Browser", // Arc
+        "company.thebrowser.dia",
+        "com.brave.Browser",
+        "com.microsoft.edgemac",
+        "com.microsoft.edgemac.beta",
+        "com.operasoftware.Opera",
+        "com.vivaldi.Vivaldi",
+        "com.kagi.kagimacOS", // Orion
+        "com.apple.MobileSafari", // unlikely desktop host
+        "org.chromium.Chromium",
+        "com.duckduckgo.macos.browser",
+        "com.sigmaos.sigmaos.macos",
+        "app.zen-browser.zen",
+        "com.openai.chat", // ChatGPT desktop (Electron webviews)
+        "com.anthropic.claudefordesktop"
+    ]
+
+    private static let browserNameHints = [
+        "safari", "chrome", "firefox", "arc", "brave", "edge", "opera", "vivaldi",
+        "orion", "chromium", "duckduckgo", "sigmaos", "zen browser", "dia"
+    ]
+
     private static let ourBundleIDs: Set<String> = {
         var s: Set<String> = ["dev.n0tfluid.app"]
         if let b = Bundle.main.bundleIdentifier { s.insert(b) }
@@ -112,22 +146,56 @@ final class TextInjector {
         return Self.terminalNameHints.contains { name.contains($0) }
     }
 
+    /// Web browsers / Electron chat apps: form fields ignore AX set-value more often than not.
+    func isBrowserTarget(_ app: NSRunningApplication? = nil) -> Bool {
+        let app = app ?? targetApp
+        guard let app else { return false }
+        if let bid = app.bundleIdentifier {
+            if Self.browserBundleIDs.contains(bid) { return true }
+            let lower = bid.lowercased()
+            if lower.contains("safari") || lower.contains("chrome") || lower.contains("firefox")
+                || lower.contains("brave") || lower.contains("edgemac") || lower.contains("chromium")
+                || lower.contains("thebrowser") || lower.contains("opera") || lower.contains("vivaldi")
+                || lower.contains("orion") || lower.contains("duckduckgo") {
+                return true
+            }
+        }
+        let name = (app.localizedName ?? "").lowercased()
+        return Self.browserNameHints.contains { name.contains($0) }
+    }
+
+    /// Prefer ⌘V over AX when the app hosts web content or complex editable views.
+    private func prefersClipboardPaste(_ app: NSRunningApplication? = nil) -> Bool {
+        if isBrowserTarget(app) { return true }
+        // Slack / Discord / Notion / Linear etc. are Electron or web-heavy
+        guard let bid = (app ?? targetApp)?.bundleIdentifier?.lowercased() else { return false }
+        let webby = ["slack", "discord", "notion", "figma", "linear", "spotify", "zoom",
+                     "teams", "webex", "whatsapp", "telegram", "signal", "obsidian",
+                     "craft", "coda", "airtable", "asana", "trello", "clickup"]
+        return webby.contains { bid.contains($0) }
+    }
+
     func copyToClipboard(_ text: String) {
         let pb = NSPasteboard.general
         pb.clearContents()
-        pb.declareTypes([.string], owner: nil)
+        // Plain-text only — HTML on the board can make contenteditable forms paste markup.
+        let utf8 = NSPasteboard.PasteboardType("public.utf8-plain-text")
+        let plain = NSPasteboard.PasteboardType("public.plain-text")
+        pb.declareTypes([.string, utf8, plain], owner: nil)
         _ = pb.setString(text, forType: .string)
-        _ = pb.setData(Data(text.utf8), forType: NSPasteboard.PasteboardType("public.utf8-plain-text"))
+        _ = pb.setData(Data(text.utf8), forType: utf8)
+        _ = pb.setString(text, forType: plain)
     }
 
     func paste(_ text: String) {
         insertAfterDelay(text)
     }
 
-    /// Fast path: copy → clear PTT modifiers → activate → paste. Target ~100–250ms after release.
+    /// Fast path: copy → clear PTT modifiers → activate → paste.
+    /// Aim for ~40–120ms after release when modifiers are already up.
     func insertAfterDelay(
         _ text: String,
-        delay: TimeInterval = 0.05,
+        delay: TimeInterval = 0.02,
         prepareFocus: (() -> Void)? = nil,
         completion: ((InsertMethod?) -> Void)? = nil
     ) {
@@ -145,19 +213,46 @@ final class TextInjector {
         let terminal = isTerminalTarget()
         let pid = targetApp?.processIdentifier
 
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            // Only wait if Option is still physically down (Right-⌥ PTT)
-            self.waitForClearModifiers(maxWait: 0.2) {
-                self.forceActivateTarget()
-                // Minimal settle — paste is rarely the bottleneck vs STT
-                let settle: TimeInterval = terminal ? 0.05 : 0.02
-                DispatchQueue.main.asyncAfter(deadline: .now() + settle) {
-                    self.copyToClipboard(text)
-                    let method = self.insertNow(text, pid: pid ?? self.targetApp?.processIdentifier)
-                    self.lastMethod = method
-                    completion?(method)
-                }
+        let browserish = prefersClipboardPaste()
+        let runInsert = {
+            self.forceActivateTarget()
+            // Browsers / webviews need a brief focus settle or ⌘V lands nowhere.
+            // Terminals need a hair more than native AX apps.
+            let settle: TimeInterval
+            if browserish {
+                settle = 0.08
+            } else if terminal {
+                settle = 0.03
+            } else {
+                settle = 0.02
             }
+            let finish = {
+                self.copyToClipboard(text)
+                let method = self.insertNow(text, pid: pid ?? self.targetApp?.processIdentifier)
+                self.lastMethod = method
+                completion?(method)
+            }
+            if settle > 0 {
+                DispatchQueue.main.asyncAfter(deadline: .now() + settle, execute: finish)
+            } else {
+                finish()
+            }
+        }
+
+        let afterDelay = {
+            // Only poll if Option is still physically down (Right-⌥ PTT)
+            let flags = NSEvent.modifierFlags.intersection([.command, .option, .control, .shift])
+            if flags.isEmpty {
+                runInsert()
+            } else {
+                self.waitForClearModifiers(maxWait: 0.12, then: runInsert)
+            }
+        }
+
+        if delay <= 0 {
+            afterDelay()
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: afterDelay)
         }
     }
 
@@ -200,6 +295,8 @@ final class TextInjector {
         if NSApp.isActive { NSApp.deactivate() }
         ensurePasteTarget()
         guard let app = targetApp, !app.isTerminated else { return }
+        // Yield so a menu-bar / accessory app can hand frontmost to the browser cleanly (macOS 14+).
+        NSApp.yieldActivation(to: app)
         app.activate()
         let appEl = AXUIElementCreateApplication(app.processIdentifier)
         AXUIElementSetAttributeValue(appEl, kAXFrontmostAttribute as CFString, kCFBooleanTrue)
@@ -209,52 +306,84 @@ final class TextInjector {
 
     private func insertNow(_ text: String, pid: pid_t?) -> InsertMethod? {
         copyToClipboard(text)
-        neutralizeModifiers(to: pid)
+        neutralizeModifiers(to: pid, delivery: .session)
 
         if isTerminalTarget() {
             return insertIntoTerminalOrTUI(text, pid: pid)
         }
 
-        // GUI apps: AX first
+        // Browsers / Electron / webviews: skip AX. Setting AX value often reports
+        // success without inserting at the caret in form fields / contenteditable.
+        if prefersClipboardPaste() {
+            return insertViaClipboardPaste(text, pid: pid)
+        }
+
+        // Native GUI: AX at caret when available, else ⌘V
         if Self.accessibilityGranted(), insertViaAccessibilityIntoTarget(text) {
             return .accessibility
         }
 
-        forceActivateTarget()
-        copyToClipboard(text)
-        neutralizeModifiers(to: pid)
-        performPasteKeystroke(to: pid)
-        return Self.accessibilityGranted() ? .clipboardPaste : .clipboardOnly
+        return insertViaClipboardPaste(text, pid: pid)
     }
 
-    /// Terminal + Grok Build: ⌘V to host PID first (instant). Type only if paste can't run.
+    /// Terminal + Grok Build: PID-targeted ⌘V (avoids stealing focus from other apps).
     private func insertIntoTerminalOrTUI(_ text: String, pid: pid_t?) -> InsertMethod {
         let pid = pid ?? targetApp?.processIdentifier
         copyToClipboard(text)
-        neutralizeModifiers(to: pid)
+        neutralizeModifiers(to: pid, delivery: .pid)
         forceActivateTarget()
         copyToClipboard(text)
 
-        // 1) Fast PID-targeted ⌘V (one shot — no multi-second typing)
-        neutralizeModifiers(to: pid)
-        performPasteKeystroke(to: pid)
+        neutralizeModifiers(to: pid, delivery: .pid)
+        performPasteKeystroke(to: pid, delivery: .pid)
         return .terminalPaste
     }
 
-    // MARK: - PID-targeted CGEvent helpers
+    /// Clipboard + real ⌘V — best path for browser forms and most GUI apps.
+    /// Uses session HID events (same as a physical keyboard) so Chromium/WebKit form
+    /// fields actually receive the paste; PID-only posts often never reach the caret.
+    private func insertViaClipboardPaste(_ text: String, pid: pid_t?) -> InsertMethod {
+        let pid = pid ?? targetApp?.processIdentifier
+        forceActivateTarget()
+        copyToClipboard(text)
+        neutralizeModifiers(to: pid, delivery: .session)
+        performPasteKeystroke(to: pid, delivery: .session)
+        return Self.accessibilityGranted() ? .clipboardPaste : .clipboardOnly
+    }
 
-    private func post(_ event: CGEvent, to pid: pid_t?) {
+    // MARK: - CGEvent helpers
+
+    private enum EventDelivery {
+        /// Target process only (terminals / TUI hosts).
+        case pid
+        /// Session-wide HID tap — required for browsers after the target is frontmost.
+        case session
+    }
+
+    private func makeEventSource() -> CGEventSource? {
+        // hidSystemState avoids inheriting sticky Option/Command from the PTT release.
+        let source = CGEventSource(stateID: .hidSystemState)
+        source?.localEventsSuppressionInterval = 0
+        return source
+    }
+
+    private func post(_ event: CGEvent, to pid: pid_t?, delivery: EventDelivery) {
         event.setIntegerValueField(.eventSourceUserData, value: HotkeyService.syntheticEventMarker)
-        if let pid {
-            event.postToPid(pid)
-        } else {
+        switch delivery {
+        case .pid:
+            if let pid {
+                event.postToPid(pid)
+            } else {
+                event.post(tap: .cghidEventTap)
+            }
+        case .session:
+            // Frontmost app receives this; forceActivateTarget() must run first.
             event.post(tap: .cghidEventTap)
         }
     }
 
-    private func neutralizeModifiers(to pid: pid_t?) {
-        let source = CGEventSource(stateID: .combinedSessionState)
-        source?.localEventsSuppressionInterval = 0
+    private func neutralizeModifiers(to pid: pid_t?, delivery: EventDelivery = .session) {
+        let source = makeEventSource()
         let keys: [CGKeyCode] = [
             CGKeyCode(kVK_Option), CGKeyCode(kVK_RightOption),
             CGKeyCode(kVK_Command), CGKeyCode(kVK_RightCommand),
@@ -264,51 +393,50 @@ final class TextInjector {
         for key in keys {
             if let up = CGEvent(keyboardEventSource: source, virtualKey: key, keyDown: false) {
                 up.flags = []
-                post(up, to: pid)
+                post(up, to: pid, delivery: delivery)
             }
         }
     }
 
-    private func performPasteKeystroke(to pid: pid_t?) {
-        let source = CGEventSource(stateID: .combinedSessionState)
-        source?.localEventsSuppressionInterval = 0
+    private func performPasteKeystroke(to pid: pid_t?, delivery: EventDelivery = .session) {
+        let source = makeEventSource()
         let cmdKey = CGKeyCode(kVK_Command)
         let vKey = CGKeyCode(kVK_ANSI_V)
 
+        // ⌘ down → v down → v up → ⌘ up (matches a real paste chord)
         if let e = CGEvent(keyboardEventSource: source, virtualKey: cmdKey, keyDown: true) {
             e.flags = .maskCommand
-            post(e, to: pid)
+            post(e, to: pid, delivery: delivery)
         }
         if let e = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: true) {
             e.flags = .maskCommand
-            post(e, to: pid)
+            post(e, to: pid, delivery: delivery)
         }
         if let e = CGEvent(keyboardEventSource: source, virtualKey: vKey, keyDown: false) {
             e.flags = .maskCommand
-            post(e, to: pid)
+            post(e, to: pid, delivery: delivery)
         }
         if let e = CGEvent(keyboardEventSource: source, virtualKey: cmdKey, keyDown: false) {
             e.flags = []
-            post(e, to: pid)
+            post(e, to: pid, delivery: delivery)
         }
     }
 
     @discardableResult
     private func typeUnicode(to pid: pid_t?, text: String) -> Bool {
-        let source = CGEventSource(stateID: .combinedSessionState)
-        source?.localEventsSuppressionInterval = 0
+        let source = makeEventSource()
         var ok = false
         for scalar in text.utf16 {
             var chars = [UniChar](repeating: 0, count: 1)
             chars[0] = scalar
             if let down = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: true) {
                 down.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
-                post(down, to: pid)
+                post(down, to: pid, delivery: .session)
                 ok = true
             }
             if let up = CGEvent(keyboardEventSource: source, virtualKey: 0, keyDown: false) {
                 up.keyboardSetUnicodeString(stringLength: 1, unicodeString: &chars)
-                post(up, to: pid)
+                post(up, to: pid, delivery: .session)
             }
         }
         return ok

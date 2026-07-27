@@ -26,89 +26,119 @@ final class AppState: ObservableObject {
     @Published var modelDownloadProgress: Double = 0
     @Published var modelDownloadStatus = ""
 
-    // MARK: - Settings
-    @AppStorage("hotkeyPreset") var hotkeyPresetRaw: String = HotkeyPreset.rightOption.rawValue
-    @AppStorage("mode") var modeRaw: String = DictationMode.transcribe.rawValue
-    @AppStorage("transcriptionEngine") var transcriptionEngineRaw: String = TranscriptionEngine.appleSpeech.rawValue
-    @AppStorage("modelID") var modelID: String = WhisperModel.small.rawValue
-    @AppStorage("parakeetModelID") var parakeetModelID: String = ParakeetModel.tdt06bV2.rawValue
-    @AppStorage("speedPreset") var speedPresetRaw: String = SpeedPreset.balanced.rawValue
-    @AppStorage("autoPaste") var autoPaste = true
-    @AppStorage("playSounds") var playSounds = false
-    @AppStorage("showLiveOverlay") var showLiveOverlay = true
-    @AppStorage("livePartials") var livePartials = true
-    @AppStorage("overlayPosition") var overlayPositionRaw: String = OverlayPosition.top.rawValue
-    @AppStorage("language") var language: String = "auto"
-    @Published var parakeetInstallBusy = false
-    @Published var parakeetInstallLog = ""
+    // MARK: - Settings (UserDefaults-backed @Published so UI selection never “snaps back”)
+    // @AppStorage on ObservableObject is flaky for multi-control menus: views can re-render
+    // mid-write and revert highlight. Prefer explicit defaults + @Published.
 
-    var overlayPosition: OverlayPosition {
-        get { OverlayPosition(rawValue: overlayPositionRaw) ?? .top }
-        set {
-            overlayPositionRaw = newValue.rawValue
+    /// Suppress didSet persistence / side-effects while hydrating from UserDefaults.
+    private var isHydrating = false
+
+    @Published var hotkeyPreset: HotkeyPreset = .rightOption {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(hotkeyPreset.rawValue, forKey: "hotkeyPreset")
+            rebindHotkey()
+        }
+    }
+    @Published var mode: DictationMode = .transcribe {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(mode.rawValue, forKey: "mode")
+        }
+    }
+    @Published var transcriptionEngine: TranscriptionEngine = .appleSpeech {
+        didSet {
+            guard !isHydrating, oldValue != transcriptionEngine else { return }
+            UserDefaults.standard.set(transcriptionEngine.rawValue, forKey: "transcriptionEngine")
+            Task { await refreshModelStatus() }
+        }
+    }
+    @Published var selectedModel: WhisperModel = .small {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(selectedModel.rawValue, forKey: "modelID")
+        }
+    }
+    @Published var selectedParakeetModel: ParakeetModel = .tdt06bV2 {
+        didSet {
+            guard !isHydrating, oldValue != selectedParakeetModel else { return }
+            UserDefaults.standard.set(selectedParakeetModel.rawValue, forKey: "parakeetModelID")
+            Task { await refreshModelStatus() }
+        }
+    }
+    @Published var speedPreset: SpeedPreset = .balanced {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(speedPreset.rawValue, forKey: "speedPreset")
+            // Only tweak Whisper model/language — never force-switch engine (that caused snap-back)
+            selectedModel = speedPreset.whisperModel
+            if let lang = speedPreset.preferredLanguage {
+                language = lang
+            }
+        }
+    }
+    @Published var autoPaste = true {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(autoPaste, forKey: "autoPaste")
+        }
+    }
+    @Published var playSounds = false {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(playSounds, forKey: "playSounds")
+        }
+    }
+    @Published var showLiveOverlay = true {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(showLiveOverlay, forKey: "showLiveOverlay")
+        }
+    }
+    @Published var livePartials = true {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(livePartials, forKey: "livePartials")
+        }
+    }
+    @Published var language: String = "auto" {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(language, forKey: "language")
+        }
+    }
+    @Published var smartPunctuation = true {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(smartPunctuation, forKey: "smartPunctuation")
+        }
+    }
+    @Published var stripLightFillers = false {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(stripLightFillers, forKey: "stripLightFillers")
+        }
+    }
+    @Published var warmModelOnLaunch = true {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(warmModelOnLaunch, forKey: "warmModelOnLaunch")
+        }
+    }
+    @Published var overlayPosition: OverlayPosition = .top {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(overlayPosition.rawValue, forKey: "overlayPosition")
             noteOverlayContentChanged()
         }
     }
 
+    @Published var parakeetInstallBusy = false
+    @Published var parakeetInstallLog = ""
+
     /// Resize/reposition overlay when transcript grows or settings change.
     func noteOverlayContentChanged() {
         overlay?.refreshLayout()
-    }
-    @AppStorage("smartPunctuation") var smartPunctuation = true
-    @AppStorage("stripLightFillers") var stripLightFillers = false
-    @AppStorage("warmModelOnLaunch") var warmModelOnLaunch = true
-
-    var mode: DictationMode {
-        get { DictationMode(rawValue: modeRaw) ?? .transcribe }
-        set {
-            objectWillChange.send()
-            modeRaw = newValue.rawValue
-        }
-    }
-
-    var hotkeyPreset: HotkeyPreset {
-        get { HotkeyPreset(rawValue: hotkeyPresetRaw) ?? .rightOption }
-        set {
-            objectWillChange.send()
-            hotkeyPresetRaw = newValue.rawValue
-            rebindHotkey()
-        }
-    }
-
-    var speedPreset: SpeedPreset {
-        get { SpeedPreset(rawValue: speedPresetRaw) ?? .balanced }
-        set {
-            objectWillChange.send()
-            speedPresetRaw = newValue.rawValue
-            applySpeedPreset(newValue)
-        }
-    }
-
-    var transcriptionEngine: TranscriptionEngine {
-        get { TranscriptionEngine(rawValue: transcriptionEngineRaw) ?? .appleSpeech }
-        set {
-            guard newValue.rawValue != transcriptionEngineRaw else { return }
-            objectWillChange.send()
-            transcriptionEngineRaw = newValue.rawValue
-            Task { await refreshModelStatus() }
-        }
-    }
-
-    var selectedModel: WhisperModel {
-        get { WhisperModel(rawValue: modelID) ?? .small }
-        set {
-            objectWillChange.send()
-            modelID = newValue.rawValue
-        }
-    }
-
-    var selectedParakeetModel: ParakeetModel {
-        get { ParakeetModel(rawValue: parakeetModelID) ?? .tdt06bV2 }
-        set {
-            objectWillChange.send()
-            parakeetModelID = newValue.rawValue
-            Task { await refreshModelStatus() }
-        }
     }
 
     var filteredHistory: [DictationEntry] {
@@ -136,7 +166,36 @@ final class AppState: ObservableObject {
     private var sessionID = UUID()
     private var rewriteSourceText: String?
 
-    private init() {}
+    private init() {
+        loadPersistedSettings()
+    }
+
+    private func loadPersistedSettings() {
+        isHydrating = true
+        defer { isHydrating = false }
+        let d = UserDefaults.standard
+        if let v = d.string(forKey: "hotkeyPreset"), let p = HotkeyPreset(rawValue: v) { hotkeyPreset = p }
+        if let v = d.string(forKey: "mode"), let m = DictationMode(rawValue: v) { mode = m }
+        if let v = d.string(forKey: "transcriptionEngine"), let e = TranscriptionEngine(rawValue: v) {
+            transcriptionEngine = e
+        }
+        if let v = d.string(forKey: "speedPreset"), let p = SpeedPreset(rawValue: v) { speedPreset = p }
+        if let v = d.string(forKey: "modelID"), let m = WhisperModel(rawValue: v) { selectedModel = m }
+        if let v = d.string(forKey: "parakeetModelID"), let m = ParakeetModel(rawValue: v) {
+            selectedParakeetModel = m
+        }
+        if d.object(forKey: "autoPaste") != nil { autoPaste = d.bool(forKey: "autoPaste") }
+        if d.object(forKey: "playSounds") != nil { playSounds = d.bool(forKey: "playSounds") }
+        if d.object(forKey: "showLiveOverlay") != nil { showLiveOverlay = d.bool(forKey: "showLiveOverlay") }
+        if d.object(forKey: "livePartials") != nil { livePartials = d.bool(forKey: "livePartials") }
+        if let v = d.string(forKey: "language") { language = v }
+        if d.object(forKey: "smartPunctuation") != nil { smartPunctuation = d.bool(forKey: "smartPunctuation") }
+        if d.object(forKey: "stripLightFillers") != nil { stripLightFillers = d.bool(forKey: "stripLightFillers") }
+        if d.object(forKey: "warmModelOnLaunch") != nil { warmModelOnLaunch = d.bool(forKey: "warmModelOnLaunch") }
+        if let v = d.string(forKey: "overlayPosition"), let p = OverlayPosition(rawValue: v) {
+            overlayPosition = p
+        }
+    }
 
     func bootstrap() {
         overlay = OverlayController(appState: self)
@@ -144,6 +203,7 @@ final class AppState: ObservableObject {
         bindModelDownload()
         rebindHotkey()
         playSounds = false
+        UserDefaults.standard.set(false, forKey: "playSounds")
         statusText = "Hold \(hotkeyPreset.displayName) to dictate"
         refreshPermissions()
 
@@ -169,11 +229,12 @@ final class AppState: ObservableObject {
 
         Task {
             await refreshModelStatus()
-            if self.warmModelOnLaunch {
-                if self.transcriptionEngine == .whisper {
-                    await self.warmWhisper()
-                } else if self.transcriptionEngine == .parakeet {
-                    await self.warmParakeet()
+            // Always try to warm the active engine so first dictation isn't cold
+            if self.warmModelOnLaunch || self.transcriptionEngine == .parakeet {
+                switch self.transcriptionEngine {
+                case .whisper: await self.warmWhisper()
+                case .parakeet: await self.warmParakeet()
+                case .appleSpeech: break
                 }
             }
         }
@@ -192,10 +253,8 @@ final class AppState: ObservableObject {
     }
 
     func applySpeedPreset(_ preset: SpeedPreset) {
-        selectedModel = preset.whisperModel
-        if let lang = preset.preferredLanguage {
-            language = lang
-        }
+        // Explicit user action from Settings only — never auto-force engine from UI rebuilds
+        speedPreset = preset
         if transcriptionEngine != .whisper {
             transcriptionEngine = .whisper
         }
@@ -355,6 +414,15 @@ final class AppState: ObservableObject {
 
         injector.rememberTargetApp()
 
+        // Warm STT while user is still holding — hides model-load latency on release
+        Task {
+            switch transcriptionEngine {
+            case .parakeet: await warmParakeet()
+            case .whisper where warmModelOnLaunch: await warmWhisper()
+            default: break
+            }
+        }
+
         if mode == .rewrite {
             let pid = injector.targetApp?.processIdentifier
             rewriteSourceText = SelectionService.readSelectedText(targetPID: pid)
@@ -366,10 +434,16 @@ final class AppState: ObservableObject {
         }
 
         do {
-            try audio.start(livePartials: livePartials, language: language)
+            // Live partials only when wanted — Apple Speech path is cheaper without them for pure final STT
+            let usePartials = livePartials && (transcriptionEngine == .appleSpeech || showLiveOverlay)
+            try audio.start(livePartials: usePartials, language: language)
             sessionID = UUID()
             isRecording = true
-            showOverlay = true
+            // Lightweight UI while holding (full overlay only if enabled)
+            if showLiveOverlay {
+                showOverlay = true
+                overlay?.show()
+            }
             switch mode {
             case .translate: statusText = "Listening (translate)…"
             case .rewrite: statusText = "Listening (rewrite)…"
@@ -377,7 +451,6 @@ final class AppState: ObservableObject {
             case .transcribe: statusText = "Listening… \(hotkeyPreset.displayName)"
             }
             if playSounds { SoundPlayer.playStart() }
-            overlay?.show()
         } catch {
             errorMessage = error.localizedDescription
             statusText = "Mic error"
@@ -394,8 +467,14 @@ final class AppState: ObservableObject {
         statusText = "Transcribing…"
         if livePreview.isEmpty { livePreview = "…" }
         if playSounds { SoundPlayer.playStop() }
-        overlay?.show()
-        showOverlay = true
+        // Don't raise overlay during STT when auto-pasting — keeps target app focused
+        if showLiveOverlay && !autoPaste {
+            overlay?.show()
+            showOverlay = true
+        } else {
+            overlay?.hide()
+            showOverlay = false
+        }
 
         let thisSession = sessionID
         let engine = transcriptionEngine
@@ -406,6 +485,8 @@ final class AppState: ObservableObject {
         let wantPaste = autoPaste
         let selectedForRewrite = rewriteSourceText
         let targetBundle = injector.targetApp?.bundleIdentifier
+        let smart = smartPunctuation
+        let strip = stripLightFillers
 
         let sampleResult: Result<URL, Error>
         do { sampleResult = .success(try audio.stop()) }
@@ -456,12 +537,12 @@ final class AppState: ObservableObject {
                     text = self.applyRewrite(source: source, instruction: text)
                 }
 
-                // Punctuation + dictionary + app-aware rules
+                // Punctuation + dictionary (use values captured at stop — no extra main-actor hops)
                 if !text.isEmpty {
                     let opts = TranscriptFormatter.options(
                         forBundleID: targetBundle,
-                        smartPunctuation: self.smartPunctuation,
-                        stripFillers: self.stripLightFillers || dictationMode == .articulate
+                        smartPunctuation: smart,
+                        stripFillers: strip || dictationMode == .articulate
                     )
                     text = TranscriptFormatter.format(text, options: opts)
                     text = self.dictionary.apply(text)
@@ -473,9 +554,6 @@ final class AppState: ObservableObject {
                     self.isEnhancing = true
                     self.statusText = "Articulating…"
                     self.livePreview = text
-                    self.showOverlay = true
-                    self.overlay?.show()
-                    self.overlay?.refreshLayout()
 
                     text = ArticulateService.articulate(text)
                     text = self.dictionary.apply(text)
@@ -488,17 +566,10 @@ final class AppState: ObservableObject {
                     self.statusText = "Articulated"
                     self.isEnhancing = false
                     self.livePreview = text
-                    self.overlay?.refreshLayout()
                 }
 
                 self.lastTranscript = text
                 self.livePreview = text.isEmpty ? "(no speech detected)" : text
-                // Always show full transcript in overlay
-                if self.showLiveOverlay {
-                    self.showOverlay = true
-                    self.overlay?.show()
-                    self.overlay?.refreshLayout()
-                }
 
                 guard !text.isEmpty else {
                     self.statusText = "No speech detected"
@@ -507,15 +578,15 @@ final class AppState: ObservableObject {
                     return
                 }
 
-                self.appendHistory(text)
+                // Clipboard ASAP so paste can race with history write
                 self.injector.copyToClipboard(text)
+                self.appendHistory(text)
 
                 if wantPaste {
                     let intoTerminal = self.injector.isTerminalTarget()
                     let targetName = self.injector.targetApp?.localizedName ?? "app"
-                    self.statusText = intoTerminal ? "Pasting into \(targetName)…" : "Inserting into \(targetName)…"
-                    self.livePreview = text
-                    // Hide overlay fully before paste so Grok Build / Terminal keep focus
+                    self.statusText = intoTerminal ? "Pasting…" : "Inserting…"
+                    // Keep target focused — no overlay until after paste
                     self.showOverlay = false
                     self.overlay?.hide()
                     NSApp.deactivate()
@@ -529,10 +600,10 @@ final class AppState: ObservableObject {
                     }
 
                     self.livePreview = text
+                    // Brief confirmation only if user wants overlay (not mid-keystroke)
                     if self.showLiveOverlay {
                         self.showOverlay = true
                         self.overlay?.show()
-                        self.overlay?.refreshLayout()
                     }
 
                     switch method {
@@ -601,7 +672,7 @@ final class AppState: ObservableObject {
         await withCheckedContinuation { cont in
             injector.insertAfterDelay(
                 text,
-                delay: 0.05,
+                delay: 0.0,
                 prepareFocus: { [weak self] in
                     self?.overlay?.hide()
                     self?.showOverlay = false

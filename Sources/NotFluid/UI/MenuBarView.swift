@@ -1,20 +1,16 @@
 import SwiftUI
 import AppKit
 
-/// Full control center in the menu-bar popup — almost everything without opening Settings.
+/// Control center shown in the status-item panel.
 struct MenuBarView: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var modelDL = ModelDownloadService.shared
 
-    private let maxScrollHeight: CGFloat = 520
-
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header
-                .padding(.bottom, 10)
-
             ScrollView(.vertical, showsIndicators: true) {
-                VStack(alignment: .leading, spacing: 12) {
+                VStack(alignment: .leading, spacing: 14) {
                     permissionBanner
                     statusBlock
                     modeSection
@@ -25,41 +21,42 @@ struct MenuBarView: View {
                     actionsSection
                     historySection
                 }
-                .padding(.bottom, 6)
+                .padding(.top, 4)
+                .padding(.bottom, 8)
             }
-            .frame(maxHeight: maxScrollHeight)
+            .frame(maxHeight: 480)
 
-            GlassDivider()
-                .padding(.vertical, 10)
+            Divider().opacity(0.35).padding(.vertical, 10)
             footer
         }
         .padding(14)
-        .frame(width: GlassTheme.panelWidth)
+        .frame(width: 360)
         .background {
-            GlassBackground(cornerRadius: GlassTheme.cornerLarge, material: .ultraThinMaterial, intense: true)
-                .shadow(color: GlassTheme.softShadow, radius: 28, y: 12)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(.ultraThinMaterial)
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Color.white.opacity(0.18), lineWidth: 0.8)
         }
-        .padding(6)
         .onAppear {
             appState.refreshPermissions()
             Task { await appState.refreshModelStatus() }
         }
     }
 
-    // MARK: - Helpers
+    // MARK: - Bindings that refresh the panel
 
     private func bindBool(_ keyPath: ReferenceWritableKeyPath<AppState, Bool>) -> Binding<Bool> {
         Binding(
             get: { appState[keyPath: keyPath] },
-            set: {
-                appState.objectWillChange.send()
-                appState[keyPath: keyPath] = $0
-            }
+            set: { appState[keyPath: keyPath] = $0 }
         )
     }
 
-    private func sectionLabel(_ text: String) -> some View {
-        GlassSectionLabel(text: text)
+    private func section(_ title: String) -> some View {
+        Text(title.uppercased())
+            .font(.system(size: 10, weight: .semibold, design: .rounded))
+            .foregroundStyle(.secondary)
+            .tracking(0.6)
     }
 
     // MARK: - Header
@@ -68,34 +65,34 @@ struct MenuBarView: View {
         HStack(spacing: 10) {
             ZStack {
                 Circle()
-                    .fill(
-                        LinearGradient(
-                            colors: [Color.accentColor.opacity(0.6), Color.accentColor.opacity(0.25)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .frame(width: 36, height: 36)
+                    .fill(Color.accentColor.opacity(0.85))
+                    .frame(width: 34, height: 34)
                 Image(systemName: "mic.fill")
-                    .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
+                    .font(.system(size: 14, weight: .semibold))
             }
-            .overlay(Circle().strokeBorder(Color.white.opacity(0.25), lineWidth: 0.6))
-
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text("PushToType")
-                    .font(.system(.headline, design: .rounded).weight(.semibold))
-                Text(headerSubtitle)
+                    .font(.headline.weight(.semibold))
+                Text("\(appState.mode.shortTitle) · \(shortEngine)")
                     .font(.caption2)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
             }
             Spacer(minLength: 0)
+            Circle()
+                .fill(statusColor)
+                .frame(width: 8, height: 8)
         }
+        .padding(.bottom, 10)
     }
 
-    private var headerSubtitle: String {
-        "\(appState.mode.shortTitle) · \(appState.transcriptionEngine.displayName)"
+    private var shortEngine: String {
+        switch appState.transcriptionEngine {
+        case .appleSpeech: return "Speech"
+        case .parakeet: return "Parakeet"
+        case .whisper: return "Whisper"
+        }
     }
 
     // MARK: - Permissions
@@ -104,73 +101,72 @@ struct MenuBarView: View {
     private var permissionBanner: some View {
         let p = appState.permissions
         if !p.allGood {
-            GlassCard(padding: 10, cornerRadius: GlassTheme.cornerSmall) {
-                VStack(alignment: .leading, spacing: 8) {
-                    sectionLabel("Permissions")
-                    HStack(spacing: 6) {
-                        GlassChip(title: "Mic", ok: p.microphone) {
-                            PermissionDoctor.requestMicrophone()
-                            PermissionDoctor.openMicrophoneSettings()
-                        }
-                        GlassChip(title: "Access", ok: p.accessibility) {
-                            if !p.accessibility {
-                                PermissionDoctor.requestAccessibility()
-                                PermissionDoctor.openAccessibilitySettings()
-                            }
-                        }
-                        GlassChip(title: "Speech", ok: p.speech) {
-                            PermissionDoctor.requestSpeech()
-                            PermissionDoctor.openSpeechSettings()
+            VStack(alignment: .leading, spacing: 8) {
+                section("Permissions")
+                HStack(spacing: 6) {
+                    permChip("Mic", p.microphone) {
+                        PermissionDoctor.requestMicrophone()
+                        PermissionDoctor.openMicrophoneSettings()
+                    }
+                    permChip("Access", p.accessibility) {
+                        if !p.accessibility {
+                            PermissionDoctor.requestAccessibility()
+                            PermissionDoctor.openAccessibilitySettings()
                         }
                     }
-                    Text("Paste needs Accessibility enabled for PushToType.")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
+                    permChip("Speech", p.speech) {
+                        PermissionDoctor.requestSpeech()
+                        PermissionDoctor.openSpeechSettings()
+                    }
                 }
             }
         }
     }
 
+    private func permChip(_ title: String, _ ok: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                Circle().fill(ok ? Color.green : Color.orange).frame(width: 6, height: 6)
+                Text(title).font(.caption2.weight(.semibold))
+            }
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.06)))
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - Status
 
     private var statusBlock: some View {
-        GlassCard {
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(spacing: 8) {
-                    Circle()
-                        .fill(statusColor)
-                        .frame(width: 8, height: 8)
-                        .shadow(color: statusColor.opacity(0.55), radius: 3)
-                    Text(appState.statusText)
-                        .font(.system(.subheadline, design: .rounded).weight(.semibold))
-                        .lineLimit(2)
-                    Spacer(minLength: 0)
-                }
-                Text(appState.modelStatus)
+        VStack(alignment: .leading, spacing: 6) {
+            section("Status")
+            Text(appState.statusText)
+                .font(.subheadline.weight(.semibold))
+                .lineLimit(2)
+            Text(appState.modelStatus)
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+            if let err = appState.errorMessage {
+                Text(err)
                     .font(.caption2)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-                if let err = appState.errorMessage {
-                    Text(err)
-                        .font(.caption2)
-                        .foregroundStyle(.red.opacity(0.9))
-                        .lineLimit(3)
-                }
-                if !appState.livePreview.isEmpty {
-                    Text(appState.livePreview)
-                        .font(.caption)
-                        .lineLimit(5)
-                        .truncationMode(.tail)
-                        .padding(8)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(
-                            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                                .fill(Color.primary.opacity(0.05))
-                        )
-                        .textSelection(.enabled)
-                }
+                    .foregroundStyle(.red.opacity(0.9))
+                    .lineLimit(3)
+            }
+            if !appState.livePreview.isEmpty {
+                Text(appState.livePreview)
+                    .font(.caption)
+                    .lineLimit(4)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.05)))
+                    .textSelection(.enabled)
             }
         }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 12).fill(Color.primary.opacity(0.04)))
     }
 
     private var statusColor: Color {
@@ -184,10 +180,10 @@ struct MenuBarView: View {
 
     private var modeSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("Mode")
+            section("Mode")
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
                 ForEach(DictationMode.allCases) { mode in
-                    chip(mode.shortTitle, selected: appState.mode == mode) {
+                    selectChip(mode.shortTitle, selected: appState.mode == mode) {
                         appState.mode = mode
                     }
                 }
@@ -195,7 +191,6 @@ struct MenuBarView: View {
             Text(appState.mode.subtitle)
                 .font(.caption2)
                 .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
                 .lineLimit(2)
         }
     }
@@ -204,157 +199,129 @@ struct MenuBarView: View {
 
     private var engineSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("Engine")
+            section("Engine")
             ForEach(TranscriptionEngine.allCases) { engine in
-                engineRow(engine)
-            }
-        }
-    }
-
-    private func engineRow(_ engine: TranscriptionEngine) -> some View {
-        let selected = appState.transcriptionEngine == engine
-        return Button {
-            appState.transcriptionEngine = engine
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Color.accentColor : .secondary)
-                    .font(.system(size: 14))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(engine.displayName)
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.primary)
-                    Text(engineBlurb(engine))
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 8)
-            .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(selected ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.04))
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .strokeBorder(
-                        selected ? Color.accentColor.opacity(0.45) : Color.white.opacity(0.1),
-                        lineWidth: selected ? 1 : 0.5
+                Button {
+                    appState.transcriptionEngine = engine
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: appState.transcriptionEngine == engine ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(appState.transcriptionEngine == engine ? Color.accentColor : .secondary)
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(engine.displayName)
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Text(engineBlurb(engine))
+                                .font(.caption2)
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 10)
+                            .fill(appState.transcriptionEngine == engine
+                                  ? Color.accentColor.opacity(0.12)
+                                  : Color.primary.opacity(0.04))
                     )
+                }
+                .buttonStyle(.plain)
             }
         }
-        .buttonStyle(.plain)
     }
 
-    private func engineBlurb(_ engine: TranscriptionEngine) -> String {
-        switch engine {
+    private func engineBlurb(_ e: TranscriptionEngine) -> String {
+        switch e {
         case .appleSpeech: return "Built-in · no download"
         case .parakeet: return "Fast local · NVIDIA"
         case .whisper: return "Multilingual · translate"
         }
     }
 
-    // MARK: - Engine-specific options
-
     @ViewBuilder
     private var engineOptionsSection: some View {
         switch appState.transcriptionEngine {
         case .parakeet:
-            VStack(alignment: .leading, spacing: 8) {
-                sectionLabel("Parakeet model")
-                ForEach(ParakeetModel.allCases) { model in
-                    optionRow(
-                        title: model == .tdt06bV2 ? "English (v2)" : "Multilingual (v3)",
-                        subtitle: model.detail,
-                        selected: appState.selectedParakeetModel == model
-                    ) {
-                        appState.selectedParakeetModel = model
+            VStack(alignment: .leading, spacing: 6) {
+                section("Parakeet model")
+                ForEach(ParakeetModel.allCases) { m in
+                    Button {
+                        appState.selectedParakeetModel = m
+                    } label: {
+                        HStack {
+                            Image(systemName: appState.selectedParakeetModel == m ? "checkmark.circle.fill" : "circle")
+                                .foregroundStyle(appState.selectedParakeetModel == m ? Color.accentColor : .secondary)
+                            Text(m == .tdt06bV2 ? "English (v2)" : "Multilingual (v3)")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.primary)
+                            Spacer()
+                        }
+                        .padding(8)
+                        .background(RoundedRectangle(cornerRadius: 8).fill(Color.primary.opacity(0.04)))
                     }
+                    .buttonStyle(.plain)
                 }
                 if !appState.modelReady {
                     Button {
                         appState.installParakeetRuntime()
                     } label: {
-                        Label(
-                            appState.parakeetInstallBusy ? "Installing Parakeet…" : "Install Parakeet runtime",
-                            systemImage: "arrow.down.circle"
-                        )
-                        .frame(maxWidth: .infinity)
+                        Text(appState.parakeetInstallBusy ? "Installing…" : "Install Parakeet runtime")
+                            .frame(maxWidth: .infinity)
                     }
-                    .buttonStyle(GlassProminentButtonStyle())
+                    .buttonStyle(.borderedProminent)
                     .disabled(appState.parakeetInstallBusy)
-                } else {
-                    Button("Warm Parakeet") {
-                        Task { await appState.warmParakeet() }
-                    }
-                    .buttonStyle(GlassSecondaryButtonStyle())
                 }
             }
-
         case .whisper:
-            VStack(alignment: .leading, spacing: 8) {
-                sectionLabel("Whisper")
-                Picker("Preset", selection: Binding(
-                    get: { appState.speedPreset },
-                    set: { appState.speedPreset = $0 }
-                )) {
+            VStack(alignment: .leading, spacing: 6) {
+                section("Whisper")
+                // Use tags + explicit onChange only — avoid Picker set storms on section appear
+                Picker("Preset", selection: $appState.speedPreset) {
                     ForEach(SpeedPreset.allCases) { Text($0.displayName).tag($0) }
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
 
-                Picker("Model", selection: Binding(
-                    get: { appState.selectedModel },
-                    set: { m in
-                        appState.selectedModel = m
-                        Task { await appState.refreshModelStatus() }
-                    }
-                )) {
+                Picker("Model", selection: $appState.selectedModel) {
                     ForEach(WhisperModel.allCases) { Text($0.displayName).tag($0) }
                 }
                 .labelsHidden()
+                .onChange(of: appState.selectedModel) { _, _ in
+                    Task { await appState.refreshModelStatus() }
+                }
 
                 if modelDL.isDownloading {
                     ProgressView(value: modelDL.progress) {
                         Text(modelDL.status).font(.caption2)
                     }
                 } else if !modelDL.isDownloaded(appState.selectedModel) {
-                    Button("Download \(appState.selectedModel.displayName)") {
-                        appState.downloadWhisperModel(appState.selectedModel)
+                    Button("Download model") {
+                        appState.downloadWhisperModel()
                     }
-                    .buttonStyle(GlassProminentButtonStyle())
-                } else {
-                    Button("Warm Whisper") {
-                        Task { await appState.warmWhisper() }
-                    }
-                    .buttonStyle(GlassSecondaryButtonStyle())
+                    .buttonStyle(.borderedProminent)
                 }
             }
-
         case .appleSpeech:
             VStack(alignment: .leading, spacing: 6) {
-                sectionLabel("macOS Speech")
-                Text("Uses system speech recognition. Grant Speech permission if live partials fail.")
-                    .font(.caption2)
-                    .foregroundStyle(.secondary)
+                section("macOS Speech")
                 Button("Request Speech permission") {
                     PermissionDoctor.requestSpeech()
                     Task { await appState.refreshModelStatus() }
                 }
-                .buttonStyle(GlassSecondaryButtonStyle())
+                .buttonStyle(.bordered)
             }
         }
     }
 
-    // MARK: - Hotkey + language
+    // MARK: - Hotkey / language / options
 
     private var hotkeySection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("Hotkey")
+            section("Hotkey")
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
-                ForEach(HotkeyPreset.allCases) { preset in
-                    chip(preset.displayName, selected: appState.hotkeyPreset == preset) {
-                        appState.hotkeyPreset = preset
+                ForEach(HotkeyPreset.allCases) { p in
+                    selectChip(p.displayName, selected: appState.hotkeyPreset == p) {
+                        appState.hotkeyPreset = p
                     }
                 }
             }
@@ -362,14 +329,8 @@ struct MenuBarView: View {
                 .font(.caption2)
                 .foregroundStyle(.secondary)
 
-            sectionLabel("Language")
-            Picker("Language", selection: Binding(
-                get: { appState.language },
-                set: {
-                    appState.objectWillChange.send()
-                    appState.language = $0
-                }
-            )) {
+            section("Language")
+            Picker("Language", selection: $appState.language) {
                 Text("Auto").tag("auto")
                 Text("English").tag("en")
                 Text("Spanish").tag("es")
@@ -379,48 +340,29 @@ struct MenuBarView: View {
                 Text("Italian").tag("it")
                 Text("Japanese").tag("ja")
                 Text("Chinese").tag("zh")
-                Text("Korean").tag("ko")
-                Text("Russian").tag("ru")
             }
             .labelsHidden()
         }
     }
-
-    // MARK: - Options
 
     private var optionsSection: some View {
         VStack(alignment: .leading, spacing: 6) {
-            sectionLabel("Options")
-            toggleRow("Auto-paste at cursor", bindBool(\.autoPaste))
-            toggleRow("Live partials while holding", bindBool(\.livePartials))
-            toggleRow("Show live overlay", bindBool(\.showLiveOverlay))
-            toggleRow("Smart punctuation", bindBool(\.smartPunctuation))
-            toggleRow("Strip light fillers", bindBool(\.stripLightFillers))
-            toggleRow("Play sounds", bindBool(\.playSounds))
-            toggleRow("Warm model on launch", bindBool(\.warmModelOnLaunch))
-
-            Picker("Overlay", selection: Binding(
-                get: { appState.overlayPosition },
-                set: { appState.overlayPosition = $0 }
-            )) {
-                ForEach(OverlayPosition.allCases) { Text($0.displayName).tag($0) }
-            }
-            .labelsHidden()
+            section("Options")
+            Toggle("Auto-paste at cursor", isOn: bindBool(\.autoPaste)).font(.caption).controlSize(.small)
+            Toggle("Live partials", isOn: bindBool(\.livePartials)).font(.caption).controlSize(.small)
+            Toggle("Show live overlay", isOn: bindBool(\.showLiveOverlay)).font(.caption).controlSize(.small)
+            Toggle("Smart punctuation", isOn: bindBool(\.smartPunctuation)).font(.caption).controlSize(.small)
+            Toggle("Strip light fillers", isOn: bindBool(\.stripLightFillers)).font(.caption).controlSize(.small)
+            Toggle("Play sounds", isOn: bindBool(\.playSounds)).font(.caption).controlSize(.small)
+            Toggle("Warm model on launch", isOn: bindBool(\.warmModelOnLaunch)).font(.caption).controlSize(.small)
         }
-    }
-
-    private func toggleRow(_ title: String, _ binding: Binding<Bool>) -> some View {
-        Toggle(title, isOn: binding)
-            .font(.caption)
-            .toggleStyle(.switch)
-            .controlSize(.small)
     }
 
     // MARK: - Actions
 
     private var actionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionLabel("Actions")
+            section("Actions")
             Button {
                 if appState.isRecording {
                     appState.stopDictationAndTranscribe()
@@ -434,46 +376,40 @@ struct MenuBarView: View {
                 )
                 .frame(maxWidth: .infinity)
             }
-            .buttonStyle(GlassProminentButtonStyle())
+            .buttonStyle(.borderedProminent)
             .disabled(appState.isTranscribing || appState.isEnhancing)
 
             if appState.isRecording {
-                Button("Cancel recording") { appState.cancelDictation() }
-                    .buttonStyle(GlassSecondaryButtonStyle())
+                Button("Cancel") { appState.cancelDictation() }
+                    .buttonStyle(.bordered)
             }
 
             HStack(spacing: 6) {
                 Button("Copy last") { appState.copyLast() }
-                    .buttonStyle(GlassSecondaryButtonStyle())
+                    .buttonStyle(.bordered)
                     .disabled(appState.lastTranscript.isEmpty)
                 Button("Paste last") { appState.pasteLast() }
-                    .buttonStyle(GlassSecondaryButtonStyle())
+                    .buttonStyle(.bordered)
                     .disabled(appState.lastTranscript.isEmpty)
             }
 
             Button("Test paste") {
                 appState.injector.rememberTargetApp()
                 let marker = "PushToType ✓"
-                appState.showOverlay = false
-                NSApp.deactivate()
-                appState.injector.insertAfterDelay(marker, delay: 0.08, prepareFocus: nil) { method in
+                appState.injector.insertAfterDelay(marker, delay: 0.08) { method in
                     DispatchQueue.main.async {
                         appState.lastTranscript = marker
                         appState.livePreview = marker
-                        if method == .accessibility || method == .appleScriptPaste
-                            || method == .terminalPaste || method == .clipboardPaste || method == .typedText {
+                        if method != nil && method != .clipboardOnly {
                             appState.statusText = "Test paste OK"
                             appState.errorMessage = nil
                         } else {
                             appState.statusText = "Test paste failed — press ⌘V"
-                            if !TextInjector.accessibilityGranted() {
-                                appState.errorMessage = "Enable Accessibility"
-                            }
                         }
                     }
                 }
             }
-            .buttonStyle(GlassSecondaryButtonStyle())
+            .buttonStyle(.bordered)
 
             Text("Hold \(appState.hotkeyPreset.displayName) · release to insert")
                 .font(.caption2)
@@ -481,25 +417,16 @@ struct MenuBarView: View {
         }
     }
 
-    // MARK: - History
-
     @ViewBuilder
     private var historySection: some View {
         if !appState.filteredHistory.isEmpty {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    sectionLabel("Recent")
+                    section("Recent")
                     Spacer()
-                    Button("Export") {
-                        if let url = appState.exportHistoryMarkdown() {
-                            NSWorkspace.shared.activateFileViewerSelecting([url])
-                        }
-                    }
-                    .buttonStyle(GlassSecondaryButtonStyle())
                     Button("Clear") { appState.clearHistory() }
-                        .buttonStyle(GlassSecondaryButtonStyle())
+                        .font(.caption2)
                 }
-
                 ForEach(appState.filteredHistory.prefix(5)) { entry in
                     Button {
                         appState.injector.copyToClipboard(entry.text)
@@ -518,65 +445,40 @@ struct MenuBarView: View {
         }
     }
 
-    // MARK: - Footer
-
     private var footer: some View {
         VStack(spacing: 8) {
-            HStack(spacing: 6) {
-                Button("Advanced settings…") {
-                    SettingsWindowController.shared.show(appState: appState)
-                }
-                .buttonStyle(GlassSecondaryButtonStyle())
-                .keyboardShortcut(",", modifiers: .command)
-                Spacer(minLength: 0)
+            Button("Advanced settings…") {
+                StatusItemController.shared.hidePanel()
+                // Open on Speech tab — where engine/models live
+                SettingsWindowController.shared.show(appState: appState, tab: .speech)
             }
-            Button {
+            .buttonStyle(.bordered)
+            .frame(maxWidth: .infinity)
+
+            Button(role: .destructive) {
                 NSApp.terminate(nil)
             } label: {
                 Label("Quit PushToType", systemImage: "power")
                     .frame(maxWidth: .infinity)
             }
-            .buttonStyle(GlassProminentButtonStyle(destructive: true))
-            .keyboardShortcut("q", modifiers: .command)
+            .buttonStyle(.borderedProminent)
+            .tint(.red)
         }
     }
 
-    // MARK: - Shared chips / rows
+    // MARK: - Chips
 
-    private func chip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
+    private func selectChip(_ title: String, selected: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(title)
-                .font(.system(.caption2, design: .rounded).weight(.semibold))
-                .lineLimit(1)
+                .font(.caption2.weight(.semibold))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 7)
-                .background {
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .fill(selected ? Color.accentColor.opacity(0.9) : Color.primary.opacity(0.06))
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(Color.white.opacity(selected ? 0.28 : 0.1), lineWidth: 0.6)
-                }
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(selected ? Color.accentColor : Color.primary.opacity(0.06))
+                )
                 .foregroundStyle(selected ? .white : .primary)
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func optionRow(title: String, subtitle: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: selected ? "checkmark.circle.fill" : "circle")
-                    .foregroundStyle(selected ? Color.accentColor : .secondary)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(title).font(.caption.weight(.semibold)).foregroundStyle(.primary)
-                    Text(subtitle).font(.caption2).foregroundStyle(.secondary).lineLimit(2)
-                }
-                Spacer(minLength: 0)
-            }
-            .padding(8)
-            .background {
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(selected ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.04))
-            }
         }
         .buttonStyle(.plain)
     }

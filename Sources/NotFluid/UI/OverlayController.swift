@@ -192,7 +192,7 @@ struct OverlayView: View {
         .onChange(of: appState.statusText) { _, _ in
             appState.noteOverlayContentChanged()
         }
-        .onChange(of: appState.overlayPositionRaw) { _, _ in
+        .onChange(of: appState.overlayPosition) { _, _ in
             appState.noteOverlayContentChanged()
         }
     }

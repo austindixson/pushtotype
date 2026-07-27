@@ -1,20 +1,39 @@
 import SwiftUI
 import AppKit
 
+enum SettingsTab: Hashable {
+    case general, speech, dictionary, permissions, about
+}
+
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @ObservedObject private var modelDL = ModelDownloadService.shared
     @ObservedObject private var dictionary = DictionaryStore.shared
     @State private var newFind = ""
     @State private var newReplace = ""
+    @State private var selectedTab: SettingsTab = .general
+
+    init(selectedTab: SettingsTab = .general) {
+        _selectedTab = State(initialValue: selectedTab)
+    }
 
     var body: some View {
-        TabView {
-            generalTab.tabItem { Label("General", systemImage: "gearshape") }
-            engineTab.tabItem { Label("Speech", systemImage: "waveform") }
-            dictionaryTab.tabItem { Label("Dictionary", systemImage: "textformat.abc") }
-            permissionsTab.tabItem { Label("Permissions", systemImage: "lock.shield") }
-            aboutTab.tabItem { Label("About", systemImage: "info.circle") }
+        TabView(selection: $selectedTab) {
+            generalTab
+                .tabItem { Label("General", systemImage: "gearshape") }
+                .tag(SettingsTab.general)
+            engineTab
+                .tabItem { Label("Speech", systemImage: "waveform") }
+                .tag(SettingsTab.speech)
+            dictionaryTab
+                .tabItem { Label("Dictionary", systemImage: "textformat.abc") }
+                .tag(SettingsTab.dictionary)
+            permissionsTab
+                .tabItem { Label("Permissions", systemImage: "lock.shield") }
+                .tag(SettingsTab.permissions)
+            aboutTab
+                .tabItem { Label("About", systemImage: "info.circle") }
+                .tag(SettingsTab.about)
         }
         .frame(width: 580, height: 480)
         .background(.ultraThinMaterial)
@@ -341,16 +360,22 @@ struct SettingsView: View {
 final class SettingsWindowController: NSObject, NSWindowDelegate {
     static let shared = SettingsWindowController()
     private var window: NSWindow?
+    private var initialTab: SettingsTab = .general
 
-    func show(appState: AppState) {
+    func show(appState: AppState, tab: SettingsTab = .general) {
+        initialTab = tab
         if let window, window.isVisible {
+            // Rebuild content so tab selection applies
+            let root = SettingsView(selectedTab: tab)
+                .environmentObject(appState)
+            window.contentView = FirstMouseHostingView(rootView: root)
             bringToFront(window)
             return
         }
 
-        let root = SettingsView()
+        let root = SettingsView(selectedTab: tab)
             .environmentObject(appState)
-        let host = NSHostingView(rootView: root)
+        let host = FirstMouseHostingView(rootView: root)
         host.frame = NSRect(x: 0, y: 0, width: 600, height: 500)
 
         let win = NSWindow(
@@ -372,18 +397,13 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func bringToFront(_ win: NSWindow) {
-        // Accessory apps need a brief regular activation so the window can key
-        NSApp.setActivationPolicy(.regular)
         win.makeKeyAndOrderFront(nil)
         win.orderFrontRegardless()
         NSApp.activate(ignoringOtherApps: true)
+        win.makeFirstResponder(win.contentView)
     }
 
     func windowWillClose(_ notification: Notification) {
         window = nil
-        // Return to menu-bar-only presence after a beat so MenuBarExtra stays healthy
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
-            NSApp.setActivationPolicy(.accessory)
-        }
     }
 }

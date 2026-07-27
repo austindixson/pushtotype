@@ -137,10 +137,11 @@ final class AudioCaptureService {
             throw AudioCaptureError.engineFailed("No output file")
         }
 
-        if duration < 0.25 || frames < 2000 {
+        // Allow snappier short utterances (was 0.25s / 2000 frames)
+        if duration < 0.12 || frames < 800 {
             throw AudioCaptureError.tooShort
         }
-        if peak < 0.005 {
+        if peak < 0.004 {
             throw AudioCaptureError.silent
         }
 
@@ -174,7 +175,8 @@ final class AudioCaptureService {
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: ffmpeg)
             proc.arguments = [
-                "-y", "-hide_banner", "-loglevel", "error",
+                "-y", "-hide_banner", "-loglevel", "error", "-nostdin",
+                "-threads", "1",
                 "-i", raw.path,
                 "-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le",
                 out.path
