@@ -351,8 +351,21 @@ struct MenuBarView: View {
             Toggle("Auto-paste at cursor", isOn: bindBool(\.autoPaste)).font(.caption).controlSize(.small)
             Toggle("Live partials", isOn: bindBool(\.livePartials)).font(.caption).controlSize(.small)
             Toggle("Show live overlay", isOn: bindBool(\.showLiveOverlay)).font(.caption).controlSize(.small)
-            Toggle("Smart punctuation", isOn: bindBool(\.smartPunctuation)).font(.caption).controlSize(.small)
-            Toggle("Strip light fillers", isOn: bindBool(\.stripLightFillers)).font(.caption).controlSize(.small)
+            Toggle("Smart punctuation", isOn: bindBool(\.smartPunctuation))
+                .font(.caption).controlSize(.small)
+                .disabled(appState.transcriptCleanup == .s1mini)
+            Toggle("Strip light fillers", isOn: bindBool(\.stripLightFillers))
+                .font(.caption).controlSize(.small)
+                .disabled(appState.transcriptCleanup == .s1mini)
+            Toggle("S1-mini by Superwhisper", isOn: Binding(
+                get: { appState.transcriptCleanup == .s1mini },
+                set: { appState.transcriptCleanup = $0 ? .s1mini : .rules }
+            )).font(.caption).controlSize(.small)
+            if appState.transcriptCleanup == .s1mini {
+                Text(appState.s1MiniStatus)
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+            }
             Toggle("Play sounds", isOn: bindBool(\.playSounds)).font(.caption).controlSize(.small)
             Toggle("Warm model on launch", isOn: bindBool(\.warmModelOnLaunch)).font(.caption).controlSize(.small)
         }

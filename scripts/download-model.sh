@@ -16,15 +16,20 @@ case "$MODEL_ID" in
     FILE="ggml-distil-small.en.bin"
     MODEL_ID="distil-small.en"
     ;;
+  s1-mini|s1mini)
+    FILE="s1-mini-q4_k_m.gguf"
+    MODEL_ID="s1-mini"
+    BASE_URL="https://huggingface.co/superwhisper/s1-mini-GGUF/resolve/main"
+    ;;
   *)
     echo "Unknown model: $MODEL_ID"
-    echo "Usage: $0 [tiny|base|small|small.en|distil-small.en]"
+    echo "Usage: $0 [tiny|base|small|small.en|distil-small.en|s1-mini]"
     exit 1
     ;;
 esac
 
-# Official ggml models hosted for whisper.cpp
-BASE_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
+# Official ggml models hosted for whisper.cpp (S1-mini overrides BASE_URL above)
+: "${BASE_URL:=https://huggingface.co/ggerganov/whisper.cpp/resolve/main}"
 URL="$BASE_URL/$FILE"
 
 mkdir -p "$PROJECT_MODELS" "$APP_SUPPORT"
@@ -36,10 +41,9 @@ if [[ -f "$APP_SUPPORT/$FILE" ]]; then
   exit 0
 fi
 
-echo "Downloading Whisper model: $FILE"
+echo "Downloading model: $FILE"
 echo "  from $URL"
 echo "  into $APP_SUPPORT"
-echo "(This is the best small open-source dictation + translation model stack.)"
 echo
 
 TMP="$(mktemp)"

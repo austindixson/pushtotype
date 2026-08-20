@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import NotFluidSupport
 
 enum SettingsTab: Hashable {
     case general, speech, dictionary, permissions, about
@@ -35,7 +36,7 @@ struct SettingsView: View {
                 .tabItem { Label("About", systemImage: "info.circle") }
                 .tag(SettingsTab.about)
         }
-        .frame(width: 580, height: 480)
+        .frame(width: 580, height: 540)
         .background(.ultraThinMaterial)
     }
 
@@ -57,7 +58,43 @@ struct SettingsView: View {
 
                 Toggle("Auto-paste into active app", isOn: $appState.autoPaste)
                 Toggle("Smart punctuation & spacing", isOn: $appState.smartPunctuation)
+                    .disabled(appState.transcriptCleanup == .s1mini)
                 Toggle("Strip light fillers (um, uh, like)", isOn: $appState.stripLightFillers)
+                    .disabled(appState.transcriptCleanup == .s1mini)
+
+                Picker("Cleanup", selection: Binding(
+                    get: { appState.transcriptCleanup },
+                    set: { appState.transcriptCleanup = $0 }
+                )) {
+                    ForEach(TranscriptCleanup.allCases) { Text($0.displayName).tag($0) }
+                }
+                Text(appState.transcriptCleanup.detail)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if appState.transcriptCleanup == .s1mini {
+                    Picker("S1-mini styling", selection: Binding(
+                        get: { appState.s1MiniStyling },
+                        set: { appState.s1MiniStyling = $0 }
+                    )) {
+                        ForEach(S1MiniStyling.allCases, id: \.self) { Text($0.displayName).tag($0) }
+                    }
+                    Text(appState.s1MiniStatus)
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                    if modelDL.isDownloading && modelDL.status.contains("s1-mini") {
+                        ProgressView(value: modelDL.progress) {
+                            Text(modelDL.status).font(.caption)
+                        }
+                    } else if !modelDL.isS1MiniDownloaded() {
+                        Button("Download S1-mini (~462 MB)") {
+                            appState.downloadS1Mini()
+                        }
+                        .disabled(modelDL.isDownloading)
+                    }
+                    Text("S1-mini by Superwhisper runs fully on-device via llama.cpp.")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
                 Toggle("Live partials while holding", isOn: $appState.livePartials)
                 Toggle("Show live overlay", isOn: $appState.showLiveOverlay)
                 Toggle("Play sounds", isOn: $appState.playSounds)
@@ -334,7 +371,7 @@ struct SettingsView: View {
     private var aboutTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("PushToType").font(.title2.weight(.bold))
-            Text("Local Mac dictation — Whisper or macOS Speech, Terminal-aware paste, smart punctuation, live partials.")
+            Text("Local Mac dictation — Whisper or macOS Speech, Terminal-aware paste, smart punctuation or S1-mini by Superwhisper, live partials.")
                 .foregroundStyle(.secondary)
             Divider()
             Group {

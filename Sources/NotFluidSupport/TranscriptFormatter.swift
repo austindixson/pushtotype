@@ -16,17 +16,20 @@ public enum TranscriptFormatter {
         public static let terminal = Options(smartPunctuation: true, stripLightFillers: false, plainShellSafe: true)
     }
 
+    public static func isTerminalApp(_ bundleID: String?) -> Bool {
+        let id = (bundleID ?? "").lowercased()
+        return id.contains("terminal") || id.contains("iterm") || id.contains("kitty")
+            || id.contains("alacritty") || id.contains("warp") || id.contains("ghostty")
+            || id.contains("wezterm") || id == "com.apple.terminal"
+    }
+
     /// App-aware options from frontmost bundle id.
     public static func options(
         forBundleID bundleID: String?,
         smartPunctuation: Bool,
         stripFillers: Bool
     ) -> Options {
-        let id = (bundleID ?? "").lowercased()
-        let terminal =
-            id.contains("terminal") || id.contains("iterm") || id.contains("kitty")
-            || id.contains("alacritty") || id.contains("warp") || id.contains("ghostty")
-            || id.contains("wezterm") || id == "com.apple.terminal"
+        let terminal = isTerminalApp(bundleID)
         var opts = terminal ? Options.terminal : Options.default
         opts.smartPunctuation = smartPunctuation
         opts.stripLightFillers = stripFillers && !terminal

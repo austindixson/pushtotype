@@ -1,4 +1,5 @@
 import Foundation
+import NotFluidSupport
 
 /// Downloads whisper.cpp ggml weights into Application Support.
 @MainActor
@@ -27,21 +28,55 @@ final class ModelDownloadService: ObservableObject {
         FileManager.default.fileExists(atPath: localURL(for: model).path)
     }
 
+    func localS1MiniURL() -> URL {
+        modelsDirectory.appendingPathComponent(S1Mini.modelFileName)
+    }
+
+    func isS1MiniDownloaded() -> Bool {
+        let path = localS1MiniURL().path
+        guard FileManager.default.fileExists(atPath: path) else { return false }
+        let size = (try? FileManager.default.attributesOfItem(atPath: path)[.size] as? NSNumber)?.int64Value ?? 0
+        return size > 100_000_000
+    }
+
     func download(_ model: WhisperModel) async throws {
-        if isDownloaded(model) {
-            status = "\(model.displayName) already downloaded"
+        try await download(
+            from: model.downloadURL,
+            dest: localURL(for: model),
+            fileName: model.ggmlFileName,
+            displayName: model.displayName
+        )
+    }
+
+    func downloadS1Mini() async throws {
+        if isS1MiniDownloaded() {
+            status = "\(S1Mini.displayName) already downloaded"
             progress = 1
             return
+        }
+        try await download(
+            from: S1Mini.downloadURL,
+            dest: localS1MiniURL(),
+            fileName: S1Mini.modelFileName,
+            displayName: "\(S1Mini.displayName) by \(S1Mini.vendorName)"
+        )
+    }
+
+    private func download(from url: URL, dest: URL, fileName: String, displayName: String) async throws {
+        if FileManager.default.fileExists(atPath: dest.path) {
+            let size = (try? FileManager.default.attributesOfItem(atPath: dest.path)[.size] as? NSNumber)?.int64Value ?? 0
+            if size > 100_000_000 {
+                status = "\(displayName) already downloaded"
+                progress = 1
+                return
+            }
         }
         isDownloading = true
         progress = 0
         lastError = nil
-        status = "Downloading \(model.ggmlFileName)…"
+        status = "Downloading \(fileName)…"
 
         defer { isDownloading = false }
-
-        let dest = localURL(for: model)
-        let tmp = dest.appendingPathExtension("download")
 
         try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
             let session = URLSession(
@@ -63,15 +98,17 @@ final class ModelDownloadService: ObservableObject {
                                     }
                                     try FileManager.default.moveItem(at: url, to: dest)
                                     // Project Models symlink convenience
-                                    let project = FileManager.default.homeDirectoryForCurrentUser
-                                        .appendingPathComponent("Desktop/n0tfluid/Models/\(model.ggmlFileName)")
-                                    try? FileManager.default.createDirectory(
-                                        at: project.deletingLastPathComponent(),
-                                        withIntermediateDirectories: true
-                                    )
-                                    try? FileManager.default.removeItem(at: project)
-                                    try? FileManager.default.createSymbolicLink(at: project, withDestinationURL: dest)
-                                    self.status = "\(model.displayName) ready"
+                                    let home = FileManager.default.homeDirectoryForCurrentUser
+                                    for rel in ["Desktop/PushToType/Models/\(fileName)", "Desktop/n0tfluid/Models/\(fileName)"] {
+                                        let project = home.appendingPathComponent(rel)
+                                        try? FileManager.default.createDirectory(
+                                            at: project.deletingLastPathComponent(),
+                                            withIntermediateDirectories: true
+                                        )
+                                        try? FileManager.default.removeItem(at: project)
+                                        try? FileManager.default.createSymbolicLink(at: project, withDestinationURL: dest)
+                                    }
+                                    self.status = "\(displayName) ready"
                                     self.progress = 1
                                     cont.resume()
                                 } catch {
@@ -89,13 +126,12 @@ final class ModelDownloadService: ObservableObject {
                 ),
                 delegateQueue: nil
             )
-            var request = URLRequest(url: model.downloadURL)
+            var request = URLRequest(url: url)
             request.setValue("n0tfluid/0.2", forHTTPHeaderField: "User-Agent")
             let t = session.downloadTask(with: request)
             self.task = t
             t.resume()
         }
-        _ = tmp
     }
 
     func cancel() {

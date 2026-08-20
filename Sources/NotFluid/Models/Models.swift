@@ -80,6 +80,31 @@ enum SpeedPreset: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Transcript cleanup
+
+enum TranscriptCleanup: String, CaseIterable, Identifiable {
+    case rules
+    case s1mini
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .rules: return "Smart punctuation"
+        case .s1mini: return "S1-mini by Superwhisper"
+        }
+    }
+
+    var detail: String {
+        switch self {
+        case .rules:
+            return "Fast rule-based spacing, punctuation, and capitalization"
+        case .s1mini:
+            return "On-device 0.6B normalizer — fillers, self-corrections, numbers, email"
+        }
+    }
+}
+
 // MARK: - Speech engines
 
 enum TranscriptionEngine: String, CaseIterable, Identifiable {

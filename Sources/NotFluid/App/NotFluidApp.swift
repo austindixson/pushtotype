@@ -31,4 +31,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         StatusItemController.shared.showPanel()
         return true
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        AppState.shared.shutdownBackgroundWorkers()
+    }
 }

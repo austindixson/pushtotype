@@ -119,6 +119,22 @@ final class AppState: ObservableObject {
             UserDefaults.standard.set(stripLightFillers, forKey: "stripLightFillers")
         }
     }
+    @Published var transcriptCleanup: TranscriptCleanup = .rules {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(transcriptCleanup.rawValue, forKey: "transcriptCleanup")
+            if transcriptCleanup == .s1mini {
+                Task { await self.warmS1Mini() }
+            }
+        }
+    }
+    @Published var s1MiniStyling: S1MiniStyling = .semiFormal {
+        didSet {
+            guard !isHydrating else { return }
+            UserDefaults.standard.set(s1MiniStyling.rawValue, forKey: "s1MiniStyling")
+        }
+    }
+    @Published var s1MiniStatus = "S1-mini not loaded"
     @Published var warmModelOnLaunch = true {
         didSet {
             guard !isHydrating else { return }
@@ -160,6 +176,7 @@ final class AppState: ObservableObject {
     let hotkey = HotkeyService()
     let dictionary = DictionaryStore.shared
     let modelDownloader = ModelDownloadService.shared
+    let s1mini = S1MiniService.shared
     private var overlay: OverlayController?
     private var cancellables = Set<AnyCancellable>()
     private var pipelineTask: Task<Void, Never>?
@@ -191,6 +208,12 @@ final class AppState: ObservableObject {
         if let v = d.string(forKey: "language") { language = v }
         if d.object(forKey: "smartPunctuation") != nil { smartPunctuation = d.bool(forKey: "smartPunctuation") }
         if d.object(forKey: "stripLightFillers") != nil { stripLightFillers = d.bool(forKey: "stripLightFillers") }
+        if let v = d.string(forKey: "transcriptCleanup"), let c = TranscriptCleanup(rawValue: v) {
+            transcriptCleanup = c
+        }
+        if let v = d.string(forKey: "s1MiniStyling"), let s = S1MiniStyling(rawValue: v) {
+            s1MiniStyling = s
+        }
         if d.object(forKey: "warmModelOnLaunch") != nil { warmModelOnLaunch = d.bool(forKey: "warmModelOnLaunch") }
         if let v = d.string(forKey: "overlayPosition"), let p = OverlayPosition(rawValue: v) {
             overlayPosition = p
@@ -236,6 +259,11 @@ final class AppState: ObservableObject {
                 case .parakeet: await self.warmParakeet()
                 case .appleSpeech: break
                 }
+            }
+            if self.transcriptCleanup == .s1mini {
+                await self.warmS1Mini()
+            } else {
+                await self.refreshS1MiniStatus()
             }
         }
 
@@ -308,6 +336,36 @@ final class AppState: ObservableObject {
         modelStatus = "Warming Parakeet…"
         await parakeet.warm(model: selectedParakeetModel)
         await refreshModelStatus()
+    }
+
+    func refreshS1MiniStatus() async {
+        let status = await s1mini.ensureReady()
+        s1MiniStatus = status.message
+    }
+
+    func warmS1Mini() async {
+        s1MiniStatus = "Warming S1-mini…"
+        await s1mini.warm()
+        await refreshS1MiniStatus()
+    }
+
+    func downloadS1Mini() {
+        Task {
+            do {
+                try await modelDownloader.downloadS1Mini()
+                await warmS1Mini()
+            } catch {
+                errorMessage = error.localizedDescription
+                s1MiniStatus = error.localizedDescription
+            }
+        }
+    }
+
+    func shutdownBackgroundWorkers() {
+        Task {
+            await parakeet.shutdown()
+            await s1mini.shutdown()
+        }
     }
 
     func downloadWhisperModel(_ model: WhisperModel? = nil) {
@@ -487,6 +545,9 @@ final class AppState: ObservableObject {
         let targetBundle = injector.targetApp?.bundleIdentifier
         let smart = smartPunctuation
         let strip = stripLightFillers
+        let cleanup = transcriptCleanup
+        let s1Style = s1MiniStyling
+        let articulateMode = dictationMode == .articulate
 
         let sampleResult: Result<URL, Error>
         do { sampleResult = .success(try audio.stop()) }
@@ -537,14 +598,38 @@ final class AppState: ObservableObject {
                     text = self.applyRewrite(source: source, instruction: text)
                 }
 
-                // Punctuation + dictionary (use values captured at stop — no extra main-actor hops)
+                // Cleanup + dictionary (use values captured at stop — no extra main-actor hops)
                 if !text.isEmpty {
-                    let opts = TranscriptFormatter.options(
-                        forBundleID: targetBundle,
-                        smartPunctuation: smart,
-                        stripFillers: strip || dictationMode == .articulate
-                    )
-                    text = TranscriptFormatter.format(text, options: opts)
+                    let terminal = TranscriptFormatter.isTerminalApp(targetBundle)
+                    let usedS1 = cleanup == .s1mini && !terminal
+                    if usedS1 {
+                        self.isEnhancing = true
+                        self.statusText = "Cleaning (S1-mini)…"
+                        self.livePreview = text
+                        let controls = S1MiniControls(
+                            styling: s1Style,
+                            structure: articulateMode ? .lists : .prose,
+                            context: S1MiniControls.context(forBundleID: targetBundle)
+                        )
+                        do {
+                            text = try await self.s1mini.normalize(text, controls: controls)
+                        } catch {
+                            let opts = TranscriptFormatter.options(
+                                forBundleID: targetBundle,
+                                smartPunctuation: smart,
+                                stripFillers: strip || articulateMode
+                            )
+                            text = TranscriptFormatter.format(text, options: opts)
+                        }
+                        self.isEnhancing = false
+                    } else {
+                        let opts = TranscriptFormatter.options(
+                            forBundleID: targetBundle,
+                            smartPunctuation: smart,
+                            stripFillers: strip || articulateMode
+                        )
+                        text = TranscriptFormatter.format(text, options: opts)
+                    }
                     text = self.dictionary.apply(text)
                 }
 
