@@ -35,7 +35,7 @@ FluidVoice leans on Parakeet for raw speed (great for English). **n0tfluid** bet
 - **macOS Speech** or **Whisper** + **speed presets** (Fast English / Balanced)
 - **Live partials** in the overlay while you hold the hotkey
 - **Fast auto-paste** — GUI (AX) + Terminal (⌘V path)
-- **Smart punctuation** or **S1-mini by Superwhisper**, **dictionary** replacements, app-aware cleanup
+- **Smart punctuation**, **dictionary** replacements, app-aware cleanup
 - **Permission doctor** chips in the menu
 - **In-app Whisper model download**
 - History search / pin / export · Quit / Test paste
@@ -169,7 +169,7 @@ swift build -c release --product NotFluid
 # Paste regression (TextEdit + AX)
 swift build --product PasteTest && .build/debug/PasteTest
 
-# Post-STT path benchmark (raw vs punctuation vs S1-mini vs Articulate)
+# Post-STT path benchmark (raw vs punctuation vs Articulate)
 ./scripts/benchmark-boost.sh
 ```
 
@@ -180,14 +180,10 @@ Compares offline paths on fixed fixtures (no mic):
 | Path | What it measures |
 |------|------------------|
 | STT only | Raw transcript |
-| + smart punctuation | Rule cleanup (current default) |
-| + S1-mini by Superwhisper | On-device 0.6B normalizer (`s1-mini-q4_k_m.gguf`) |
+| + smart punctuation | Rule cleanup |
 | + Articulate | Offline idea restructuring |
 
-Download the normalizer once:
-
 ```bash
-./scripts/download-model.sh s1-mini   # ~462 MB GGUF, needs llama.cpp (`brew install llama.cpp`)
 ./scripts/benchmark-boost.sh
 ```
 
