@@ -32,9 +32,14 @@ final class TextInjector {
         "io.alacritty",
         "com.github.wez.wezterm",
         "com.mitchellh.ghostty",
+        "com.github.ghostty",
         "dev.warp.Warp-Stable",
         "dev.warp.Warp",
         "co.zeit.hyper",
+        "org.tabby",
+        "fun.tw93.kaku",
+        // Native tmux client with in-process Ghostty — AX tree has no pasteable field.
+        "com.cmuxterm.app",
         // Editors with integrated terminals (Grok Build often runs here)
         "com.microsoft.VSCode",
         "com.microsoft.VSCodeInsiders",
@@ -43,6 +48,7 @@ final class TextInjector {
 
     private static let terminalNameHints = [
         "terminal", "iterm", "kitty", "alacritty", "wezterm", "warp", "ghostty", "hyper",
+        "tabby", "cmux", "kaku",
         "cursor", "code", "visual studio"
     ]
 
@@ -119,31 +125,31 @@ final class TextInjector {
             return exact
         }
         return apps.first(where: {
-            let bid = ($0.bundleIdentifier ?? "").lowercased()
-            let name = ($0.localizedName ?? "").lowercased()
-            return bid.contains("terminal") || bid.contains("iterm") || bid.contains("ghostty")
-                || bid.contains("kitty") || bid.contains("warp") || bid.contains("alacritty")
-                || bid.contains("todesktop") || bid.contains("vscode") || bid.contains("cursor")
-                || Self.terminalNameHints.contains { name.contains($0) }
+            Self.looksLikeTerminal(bundleID: $0.bundleIdentifier, localizedName: $0.localizedName)
         })
     }
 
     func isTerminalTarget(_ app: NSRunningApplication? = nil) -> Bool {
         let app = app ?? targetApp
         guard let app else { return false }
-        if let bid = app.bundleIdentifier {
+        return Self.looksLikeTerminal(bundleID: app.bundleIdentifier, localizedName: app.localizedName)
+    }
+
+    /// Push-to-Type uses PID-targeted ⌘V for these (no AX field; session taps miss the TUI).
+    static func looksLikeTerminal(bundleID: String?, localizedName: String?) -> Bool {
+        if let bid = bundleID {
             if bid == "com.apple.dt.Xcode" { return false }
-            if Self.terminalBundleIDs.contains(bid) { return true }
+            if terminalBundleIDs.contains(bid) { return true }
             let lower = bid.lowercased()
             if lower.contains("terminal") || lower.contains("iterm") || lower.contains("kitty")
                 || lower.contains("alacritty") || lower.contains("wezterm") || lower.contains("warp")
                 || lower.contains("ghostty") || lower.contains("todesktop") || lower.contains("vscode")
-                || lower.contains("cursor") {
+                || lower.contains("cursor") || lower.contains("cmux") || lower.contains("tabby") {
                 return true
             }
         }
-        let name = (app.localizedName ?? "").lowercased()
-        return Self.terminalNameHints.contains { name.contains($0) }
+        let name = (localizedName ?? "").lowercased()
+        return terminalNameHints.contains { name.contains($0) }
     }
 
     /// Web browsers / Electron chat apps: form fields ignore AX set-value more often than not.

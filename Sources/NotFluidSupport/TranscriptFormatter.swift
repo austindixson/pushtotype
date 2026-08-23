@@ -26,7 +26,8 @@ public enum TranscriptFormatter {
         let terminal =
             id.contains("terminal") || id.contains("iterm") || id.contains("kitty")
             || id.contains("alacritty") || id.contains("warp") || id.contains("ghostty")
-            || id.contains("wezterm") || id == "com.apple.terminal"
+            || id.contains("wezterm") || id.contains("cmux") || id.contains("tabby")
+            || id == "com.apple.terminal"
         var opts = terminal ? Options.terminal : Options.default
         opts.smartPunctuation = smartPunctuation
         opts.stripLightFillers = stripFillers && !terminal
