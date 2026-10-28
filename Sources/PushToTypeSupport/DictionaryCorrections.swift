@@ -122,6 +122,12 @@ public enum DictionaryPairPolicy {
 }
 
 public enum DictionaryReplacements {
+    /// Trim a replacement the way `DictionaryStore.add` stores it.
+    /// Whitespace-only text becomes empty, which deletes the matched word.
+    public static func storedReplacement(_ replace: String) -> String {
+        replace.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     public static func apply(_ text: String, pairs: [ReplacementPair]) -> String {
         var result = text
         let sorted = pairs.sorted { $0.find.count > $1.find.count }

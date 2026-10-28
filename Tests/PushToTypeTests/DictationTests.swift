@@ -55,6 +55,26 @@ final class DictionaryCorrectionTests: XCTestCase {
         XCTAssertEqual(text, "see \\n now")
     }
 
+    func testStoredReplacementTrimsWhitespace() {
+        let stored = DictionaryReplacements.storedReplacement("  k8s  ")
+        XCTAssertEqual(stored, "k8s")
+        let text = DictionaryReplacements.apply(
+            "use kube now",
+            pairs: [ReplacementPair(find: "kube", replace: stored)]
+        )
+        XCTAssertEqual(text, "use k8s now")
+    }
+
+    func testWhitespaceOnlyReplacementDeletesTheMatch() {
+        let stored = DictionaryReplacements.storedReplacement(" \n\t ")
+        XCTAssertEqual(stored, "")
+        let text = DictionaryReplacements.apply(
+            "see foo now",
+            pairs: [ReplacementPair(find: "foo", replace: stored)]
+        )
+        XCTAssertEqual(text, "see  now")
+    }
+
     func testEmptyReplacementDeletesTheMatch() {
         let text = DictionaryReplacements.apply(
             "see foo now",

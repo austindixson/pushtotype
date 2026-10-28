@@ -33,7 +33,7 @@ final class DictionaryStore: ObservableObject {
 
     func add(find: String, replace: String) {
         let f = find.trimmingCharacters(in: .whitespacesAndNewlines)
-        let r = replace
+        let r = DictionaryReplacements.storedReplacement(replace)
         guard !f.isEmpty else { return }
         guard !DictionaryPairPolicy.isBlocked(find: f, replace: r) else { return }
         if let idx = entries.firstIndex(where: { $0.find.caseInsensitiveCompare(f) == .orderedSame }) {
