@@ -2,6 +2,8 @@
 
 ## [Unreleased]
 
+Pull request: https://github.com/austindixson/pushtotype/pull/1
+
 ### Added
 
 - Dictation engines: macOS Speech (`SFSpeechRecognizer`), Whisper (whisper.cpp), Parakeet TDT 0.6B v2 and v3 (onnx-asr, int8), Phonon 2 (fermion-research 0.2.4, MLX), OpenAI transcription (`gpt-4o-transcribe`, then `whisper-1`) with the API key in the Keychain, and Conway Research Underdog Bark 3.0, Bark 3.0 Clean, and Bark 3.0 Plus (MLX, weights downloaded at a pinned Hugging Face revision).
