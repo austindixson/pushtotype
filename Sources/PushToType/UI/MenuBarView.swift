@@ -1,4 +1,5 @@
 import SwiftUI
+import PushToTypeSupport
 import AppKit
 
 /// Control center shown in the status-item panel.
@@ -92,6 +93,11 @@ struct MenuBarView: View {
         case .appleSpeech: return "Speech"
         case .parakeet: return "Parakeet"
         case .whisper: return "Whisper"
+        case .phonon: return "Phonon"
+        case .openAI: return "OpenAI"
+        case .bark30: return "Bark"
+        case .bark30Clean: return "Bark Clean"
+        case .bark30Plus: return "Bark Plus"
         }
     }
 
@@ -211,7 +217,7 @@ struct MenuBarView: View {
                             Text(engine.displayName)
                                 .font(.caption.weight(.semibold))
                                 .foregroundStyle(.primary)
-                            Text(engineBlurb(engine))
+                            Text(engine.menuBlurb)
                                 .font(.caption2)
                                 .foregroundStyle(.secondary)
                         }
@@ -227,14 +233,6 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(.plain)
             }
-        }
-    }
-
-    private func engineBlurb(_ e: TranscriptionEngine) -> String {
-        switch e {
-        case .appleSpeech: return "Built-in · no download"
-        case .parakeet: return "Fast local · NVIDIA"
-        case .whisper: return "Multilingual · translate"
         }
     }
 
@@ -265,11 +263,11 @@ struct MenuBarView: View {
                     Button {
                         appState.installParakeetRuntime()
                     } label: {
-                        Text(appState.parakeetInstallBusy ? "Installing…" : "Install Parakeet runtime")
+                        Text(appState.runtimeSetupBusy ? "Installing…" : "Install Parakeet runtime")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(appState.parakeetInstallBusy)
+                    .disabled(appState.runtimeSetupBusy)
                 }
             }
         case .whisper:
@@ -310,7 +308,29 @@ struct MenuBarView: View {
                 }
                 .buttonStyle(.bordered)
             }
+        case .phonon:
+            downloadButton("Download Phonon 2 · \(PhononCatalog.model.downloadSizeLabel)") {
+                appState.installPhonon()
+            }
+        case .openAI:
+            Text(appState.openAIKeySaved ? "API key saved in Keychain" : "Add an API key in Settings")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        case .bark30, .bark30Clean, .bark30Plus:
+            downloadButton("Download \(appState.transcriptionEngine.displayName)") {
+                appState.installBark()
+            }
         }
+    }
+
+    @ViewBuilder
+    private func downloadButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(appState.runtimeSetupBusy ? "Installing…" : title)
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(appState.runtimeSetupBusy)
     }
 
     // MARK: - Hotkey / language / options

@@ -2,32 +2,41 @@
 import PackageDescription
 
 let package = Package(
-    name: "NotFluid",
+    name: "PushToType",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "NotFluid", targets: ["NotFluid"]),
+        .executable(name: "PushToType", targets: ["PushToType"]),
         .executable(name: "PasteTest", targets: ["PasteTest"]),
         .executable(name: "BoostBenchmark", targets: ["BoostBenchmark"]),
-        .library(name: "NotFluidSupport", targets: ["NotFluidSupport"])
+        .library(name: "PushToTypeSupport", targets: ["PushToTypeSupport"])
     ],
     targets: [
         .target(
-            name: "NotFluidSupport",
-            path: "Sources/NotFluidSupport"
+            name: "PushToTypeSupport",
+            path: "Sources/PushToTypeSupport",
+            resources: [
+                .process("DevLexicon.tsv")
+            ]
         ),
         .executableTarget(
-            name: "NotFluid",
-            dependencies: ["NotFluidSupport"],
-            path: "Sources/NotFluid",
+            name: "PushToType",
+            dependencies: ["PushToTypeSupport"],
+            path: "Sources/PushToType",
             linkerSettings: [
                 .linkedFramework("AVFoundation"),
                 .linkedFramework("AppKit"),
                 .linkedFramework("Carbon"),
                 .linkedFramework("ApplicationServices"),
-                .linkedFramework("Speech")
+                .linkedFramework("Speech"),
+                .linkedFramework("Security")
             ]
+        ),
+        .testTarget(
+            name: "PushToTypeTests",
+            dependencies: ["PushToTypeSupport"],
+            path: "Tests/PushToTypeTests"
         ),
         .executableTarget(
             name: "PasteTest",
@@ -40,7 +49,7 @@ let package = Package(
         ),
         .executableTarget(
             name: "BoostBenchmark",
-            dependencies: ["NotFluidSupport"],
+            dependencies: ["PushToTypeSupport"],
             path: "Sources/BoostBenchmark"
         )
     ]

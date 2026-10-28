@@ -5,9 +5,9 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleExecutable</key>
-	<string>NotFluid</string>
+	<string>PushToType</string>
 	<key>CFBundleIdentifier</key>
-	<string>dev.n0tfluid.app</string>
+	<string>dev.pushtotype.app</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
 	<key>CFBundleName</key>
@@ -29,7 +29,7 @@
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>PushToType needs the microphone to dictate speech into text on your Mac. Audio is processed locally and never uploaded.</string>
+	<string>PushToType needs the microphone for dictation. Local engines keep audio on this Mac. The OpenAI engine sends the recording to OpenAI only when you select it.</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>PushToType can use macOS Speech for zero-download on-device dictation. Recognition stays on your Mac when on-device mode is available.</string>
 	<key>NSAppleEventsUsageDescription</key>

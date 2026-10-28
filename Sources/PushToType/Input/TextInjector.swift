@@ -81,13 +81,18 @@ final class TextInjector {
         "com.anthropic.claudefordesktop"
     ]
 
+    private static let browserBundleHints = [
+        "safari", "chrome", "firefox", "brave", "edgemac", "chromium",
+        "thebrowser", "opera", "vivaldi", "orion", "duckduckgo",
+    ]
+
     private static let browserNameHints = [
         "safari", "chrome", "firefox", "arc", "brave", "edge", "opera", "vivaldi",
         "orion", "chromium", "duckduckgo", "sigmaos", "zen browser", "dia"
     ]
 
     private static let ourBundleIDs: Set<String> = {
-        var s: Set<String> = ["dev.n0tfluid.app"]
+        var s: Set<String> = [AppSupport.bundleID, AppSupport.legacyBundleID]
         if let b = Bundle.main.bundleIdentifier { s.insert(b) }
         return s
     }()
@@ -137,19 +142,21 @@ final class TextInjector {
 
     /// Push-to-Type uses PID-targeted ⌘V for these (no AX field; session taps miss the TUI).
     static func looksLikeTerminal(bundleID: String?, localizedName: String?) -> Bool {
-        if let bid = bundleID {
-            if bid == "com.apple.dt.Xcode" { return false }
-            if terminalBundleIDs.contains(bid) { return true }
-            let lower = bid.lowercased()
-            if lower.contains("terminal") || lower.contains("iterm") || lower.contains("kitty")
-                || lower.contains("alacritty") || lower.contains("wezterm") || lower.contains("warp")
-                || lower.contains("ghostty") || lower.contains("todesktop") || lower.contains("vscode")
-                || lower.contains("cursor") || lower.contains("cmux") || lower.contains("tabby") {
-                return true
-            }
-        }
+        if bundleID == "com.apple.dt.Xcode" { return false }
+        if let bundleID, terminalBundleIDs.contains(bundleID) { return true }
+        if bundleContains(bundleID, hints: terminalBundleHints) { return true }
         let name = (localizedName ?? "").lowercased()
         return terminalNameHints.contains { name.contains($0) }
+    }
+
+    private static let terminalBundleHints = [
+        "terminal", "iterm", "kitty", "alacritty", "wezterm", "warp", "ghostty",
+        "todesktop", "vscode", "cursor", "cmux", "tabby",
+    ]
+
+    private static func bundleContains(_ bundleID: String?, hints: [String]) -> Bool {
+        let lower = (bundleID ?? "").lowercased()
+        return hints.contains { lower.contains($0) }
     }
 
     /// Web browsers / Electron chat apps: form fields ignore AX set-value more often than not.
@@ -158,13 +165,7 @@ final class TextInjector {
         guard let app else { return false }
         if let bid = app.bundleIdentifier {
             if Self.browserBundleIDs.contains(bid) { return true }
-            let lower = bid.lowercased()
-            if lower.contains("safari") || lower.contains("chrome") || lower.contains("firefox")
-                || lower.contains("brave") || lower.contains("edgemac") || lower.contains("chromium")
-                || lower.contains("thebrowser") || lower.contains("opera") || lower.contains("vivaldi")
-                || lower.contains("orion") || lower.contains("duckduckgo") {
-                return true
-            }
+            if Self.bundleContains(bid, hints: Self.browserBundleHints) { return true }
         }
         let name = (app.localizedName ?? "").lowercased()
         return Self.browserNameHints.contains { name.contains($0) }

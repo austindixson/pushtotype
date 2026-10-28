@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build NotFluid.app. Prefer stable Apple Development signing so Accessibility
+# Build PushToType.app. Prefer stable Apple Development signing so Accessibility
 # sticks across rebuilds (ad-hoc invalidates TCC every compile).
 set -euo pipefail
 
@@ -7,16 +7,16 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
 DIST="$ROOT/dist"
-APP="$DIST/NotFluid.app"
+APP="$DIST/PushToType.app"
 CONTENTS="$APP/Contents"
 MACOS="$CONTENTS/MacOS"
 RES="$CONTENTS/Resources"
-ENTITLEMENTS="$ROOT/Resources/NotFluid.entitlements"
+ENTITLEMENTS="$ROOT/Resources/PushToType.entitlements"
 
-echo "→ Building NotFluid (release)…"
-swift build -c release --product NotFluid
+echo "→ Building PushToType (release)…"
+swift build -c release --product PushToType
 
-BIN="$(swift build -c release --show-bin-path)/NotFluid"
+BIN="$(swift build -c release --show-bin-path)/PushToType"
 if [[ ! -x "$BIN" ]]; then
   echo "Build failed: binary not found at $BIN"
   exit 1
@@ -25,33 +25,44 @@ fi
 echo "→ Assembling $APP"
 rm -rf "$APP"
 mkdir -p "$MACOS" "$RES"
-cp "$BIN" "$MACOS/NotFluid"
-chmod +x "$MACOS/NotFluid"
+cp "$BIN" "$MACOS/PushToType"
+chmod +x "$MACOS/PushToType"
 cp "$ROOT/Resources/Info.plist" "$CONTENTS/Info.plist"
 # App icon
 if [[ -f "$ROOT/Resources/AppIcon.icns" ]]; then
   cp "$ROOT/Resources/AppIcon.icns" "$RES/AppIcon.icns"
   echo "  + AppIcon.icns"
 fi
-# Parakeet worker + setup script
-if [[ -f "$ROOT/Resources/parakeet_worker.py" ]]; then
-  cp "$ROOT/Resources/parakeet_worker.py" "$RES/parakeet_worker.py"
-  echo "  + parakeet_worker.py"
-fi
-if [[ -f "$ROOT/scripts/setup-parakeet.sh" ]]; then
-  cp "$ROOT/scripts/setup-parakeet.sh" "$RES/setup-parakeet.sh"
-  chmod +x "$RES/setup-parakeet.sh"
-  echo "  + setup-parakeet.sh"
-fi
+copy_res() {
+  local src="$1"
+  [[ -f "$src" ]] || return 0
+  cp "$src" "$RES/$(basename "$src")"
+  echo "  + $(basename "$src")"
+}
+copy_res "$ROOT/Resources/parakeet_worker.py"
+copy_res "$ROOT/Resources/bark_worker.py"
+copy_res "$ROOT/Resources/phonon_worker.py"
+copy_res "$ROOT/Resources/phonon-requirements.txt"
+copy_res "$ROOT/Resources/phonon-notices.txt"
+copy_res "$ROOT/scripts/setup-parakeet.sh"
+copy_res "$ROOT/scripts/setup-bark.sh"
+copy_res "$ROOT/scripts/setup-phonon.sh"
+copy_res "$ROOT/Sources/PushToTypeSupport/DevLexicon.tsv"
+chmod +x "$RES"/*.sh 2>/dev/null || true
+BIN_DIR="$(swift build -c release --show-bin-path)"
+while IFS= read -r bundle; do
+  cp -R "$bundle" "$RES/"
+  echo "  + $(basename "$bundle")"
+done < <(find "$BIN_DIR" -name 'PushToType_PushToTypeSupport.bundle' -maxdepth 3)
 
 # Prefer SHA-1 hash (unique). Name alone is ambiguous when two certs match.
 resolve_identity() {
-  if [[ "${NOTFLUID_ADHOC:-}" == "1" ]]; then
+  if [[ "${PUSHTOTYPE_ADHOC:-}" == "1" ]]; then
     echo ""
     return
   fi
-  if [[ -n "${NOTFLUID_SIGN_IDENTITY:-}" ]]; then
-    echo "$NOTFLUID_SIGN_IDENTITY"
+  if [[ -n "${PUSHTOTYPE_SIGN_IDENTITY:-}" ]]; then
+    echo "$PUSHTOTYPE_SIGN_IDENTITY"
     return
   fi
   if [[ -f "$DIST/.sign-identity" ]]; then
@@ -70,12 +81,12 @@ sign_ok=0
 if [[ -n "$IDENTITY" ]]; then
   echo "→ Stable codesign: $IDENTITY"
   if [[ -f "$ENTITLEMENTS" ]]; then
-    if codesign --force --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp=none "$MACOS/NotFluid" 2>/dev/null \
+    if codesign --force --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp=none "$MACOS/PushToType" 2>/dev/null \
       && codesign --force --deep --sign "$IDENTITY" --entitlements "$ENTITLEMENTS" --timestamp=none "$APP" 2>/dev/null; then
       sign_ok=1
     fi
   else
-    if codesign --force --sign "$IDENTITY" --timestamp=none "$MACOS/NotFluid" 2>/dev/null \
+    if codesign --force --sign "$IDENTITY" --timestamp=none "$MACOS/PushToType" 2>/dev/null \
       && codesign --force --deep --sign "$IDENTITY" --timestamp=none "$APP" 2>/dev/null; then
       sign_ok=1
     fi
@@ -112,14 +123,14 @@ if [[ $sign_ok -eq 0 ]]; then
 else
   mkdir -p "$DIST"
   echo "$IDENTITY" > "$DIST/.sign-identity"
-  echo "  Signature STABLE — enable Accessibility ONCE for NotFluid"
+  echo "  Signature STABLE — enable Accessibility ONCE for PushToType"
 fi
 
 xattr -cr "$APP" 2>/dev/null || true
 
 echo "→ Verifying…"
 codesign -dv --verbose=2 "$APP" 2>&1 | grep -E 'Authority|TeamIdentifier|Signature|Identifier|Format' || codesign -dv "$APP" 2>&1 | head -10
-ls -la "$MACOS/NotFluid"
+ls -la "$MACOS/PushToType"
 
 echo
 echo "✓ Built: $APP"

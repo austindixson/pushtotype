@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Build (if needed) and launch NotFluid without Gatekeeper trashing it.
+# Build (if needed) and launch PushToType without Gatekeeper trashing it.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP="$ROOT/dist/NotFluid.app"
-BIN="$APP/Contents/MacOS/NotFluid"
+APP="$ROOT/dist/PushToType.app"
+BIN="$APP/Contents/MacOS/PushToType"
 
 if [[ ! -x "$BIN" ]]; then
   echo "App missing — building…"
@@ -21,7 +21,7 @@ if ! codesign -v "$APP" 2>/dev/null; then
 fi
 
 # Kill prior instance
-pkill -x NotFluid 2>/dev/null || true
+pkill -x PushToType 2>/dev/null || true
 sleep 0.2
 
 echo "→ Launching $APP"
@@ -30,19 +30,19 @@ echo "→ Launching $APP"
 PID=$!
 sleep 0.6
 
-if kill -0 "$PID" 2>/dev/null || pgrep -x NotFluid >/dev/null; then
-  echo "✓ Running (menu bar mic icon). PID=$(pgrep -x NotFluid | tr '\n' ' ')"
+if kill -0 "$PID" 2>/dev/null || pgrep -x PushToType >/dev/null; then
+  echo "✓ Running (menu bar mic icon). PID=$(pgrep -x PushToType | tr '\n' ' ')"
   echo "  Hold Right ⌥ to dictate · Quit from the menu panel"
 else
   echo "Direct launch failed — trying open(1)…"
   open "$APP" || true
   sleep 0.8
-  if pgrep -x NotFluid >/dev/null; then
+  if pgrep -x PushToType >/dev/null; then
     echo "✓ Running via open"
   else
     echo "✗ macOS blocked the app."
-    echo "  Right-click dist/NotFluid.app → Open → Open"
-    echo "  Then: System Settings → Privacy & Security → allow NotFluid if prompted"
+    echo "  Right-click dist/PushToType.app → Open → Open"
+    echo "  Then: System Settings → Privacy & Security → allow PushToType if prompted"
     exit 1
   fi
 fi

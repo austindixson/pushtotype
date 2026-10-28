@@ -1,5 +1,5 @@
 import Foundation
-import NotFluidSupport
+import PushToTypeSupport
 
 /// Benchmark post-STT paths: raw vs smart punctuation vs Articulate (no LLM).
 ///

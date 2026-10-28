@@ -1,0 +1,336 @@
+# Dev lexicon for PushToType dictation.
+# Columns: term, spoken variants (pipe-separated), category, scope (always|code).
+# scope=code applies the spoken fix only for code and shell profiles.
+# Empty spoken means the term is a recognition hint only.
+#
+# contextualStrings uses the first terms in each category, capped at 100.
+# Apple documents that cap: SFSpeechRecognitionRequest.contextualStrings
+# https://developer.apple.com/documentation/speech/sfspeechrecognitionrequest/contextualstrings
+#
+# Sources, retrieved 2026-10-11 unless noted:
+# - Stack Exchange API, top tags by question count on https://stackoverflow.com, pagesize 100:
+#   https://api.stackexchange.com/2.3/tags?order=desc&sort=popular&site=stackoverflow&pagesize=100
+#   Tags used below include javascript, python, java, c#, php, html, css, jquery,
+#   c++, sql, mysql, node.js, reactjs, typescript, angular, json, ruby-on-rails,
+#   swift, django, ruby, bash, postgresql, git, spring, laravel, docker,
+#   spring-boot, kotlin, vue.js, scala, mongodb, flutter, firebase, azure,
+#   amazon-web-services, express, sqlite, r, objective-c, asp.net.
+#   Go, Rust, and Kubernetes were outside that top-100 page. They are included
+#   from their docs: https://go.dev/doc/ https://doc.rust-lang.org/
+#   https://kubernetes.io/docs/home/
+# - npm download ranks for 2026-04-11 (npm registry downloads API), via
+#   https://kappakit.com/research/npm-download-trends.html
+#   Packages include chalk, commander, ajv, uuid, typescript, zod, nanoid,
+#   lodash, dotenv, eslint, react, axios, vite, express, prettier, playwright,
+#   webpack, jest, next, hono, prisma, drizzle-orm, fastify, mongoose, sequelize.
+# - Most-depended-upon npm packages, anvaka npm rank gist, snapshot dated
+#   2019-08-16 inside the gist (still the public depended-upon list):
+#   https://gist.github.com/anvaka/8e8fa57c7ee1350e3491
+#   lodash, chalk, commander, react, express, debug, axios, glob, yargs,
+#   webpack, uuid, eslint, dotenv, typescript, redux, jquery, rxjs.
+# - Product names and the nginx pronunciation "engine x":
+#   https://vercel.com/docs https://supabase.com/docs https://docs.railway.com
+#   https://docs.netlify.com https://developers.cloudflare.com
+#   https://docs.aws.amazon.com https://cloud.google.com/docs
+#   https://learn.microsoft.com/azure https://docs.stripe.com https://clerk.com/docs
+#   https://www.prisma.io/docs https://orm.drizzle.team/docs https://neon.tech/docs
+#   https://firebase.google.com/docs https://docs.docker.com
+#   https://kubernetes.io/docs/reference/kubectl/ https://docs.github.com/actions
+#   https://nginx.org/en/ https://www.postgresql.org/docs/
+# - Casing names: https://www.swift.org/documentation/api-design-guidelines/
+#
+term	spoken	category	scope
+Vercel	ver cell	hosting	always
+Supabase	super base	hosting	always
+Railway	rail way	hosting	code
+Netlify		hosting	always
+Cloudflare	cloud flare	hosting	always
+AWS	a w s	hosting	always
+GCP	g c p	hosting	always
+Azure		hosting	always
+Stripe		hosting	always
+Clerk		hosting	always
+Prisma		hosting	always
+Drizzle		hosting	always
+Neon		hosting	always
+Firebase	fire base	hosting	always
+Docker		hosting	always
+Kubernetes	kuber netes|kube netes	hosting	always
+K8s	k eight s	hosting	always
+GitHub Actions	git hub actions	hosting	always
+GitHub	git hub	hosting	always
+S3	s three	hosting	always
+EC2	e c two	hosting	always
+DynamoDB	dynamo d b	hosting	always
+CloudFront	cloud front	hosting	always
+RDS		hosting	always
+ECS		hosting	always
+EKS		hosting	always
+IAM	i a m	hosting	code
+SQS		hosting	always
+CloudWatch		hosting	always
+BigQuery	big query	hosting	always
+nginx	engine x	hosting	always
+Cloud Run	cloud run	hosting	code
+Firestore	fire store	hosting	code
+SNS		hosting	always
+Lambda		hosting	always
+GKE		hosting	always
+AKS		hosting	always
+Azure Functions		hosting	always
+Cosmos DB		hosting	always
+Docker Hub	docker hub	hosting	always
+Amplify		hosting	always
+Route 53	route fifty three	hosting	always
+API Gateway		hosting	always
+Cognito		hosting	always
+CloudFormation		hosting	always
+Fargate		hosting	always
+ECR		hosting	always
+SES		hosting	always
+Athena		hosting	always
+Glue		hosting	always
+SageMaker		hosting	always
+Bedrock		hosting	always
+ElastiCache		hosting	always
+KMS		hosting	always
+Heroku		hosting	always
+Fly.io		hosting	always
+Render		hosting	always
+DigitalOcean		hosting	always
+PlanetScale		hosting	always
+Cloudflare Workers		hosting	always
+Fastly		hosting	always
+Pub/Sub	pub sub	hosting	always
+GitLab	git lab	hosting	always
+Bitbucket		hosting	always
+OAuth	oh auth	hosting	always
+Cloud SQL		hosting	always
+Claude		ai	always
+Claude Code	claude code	ai	always
+Cursor		ai	always
+Codex		ai	always
+Grok		ai	always
+OpenCode		ai	always
+Ollama		ai	always
+LLM		ai	always
+ChatGPT	chat gpt|chat g p t	ai	always
+OpenAI	open ai	ai	always
+Gemini		ai	always
+Llama		ai	always
+Anthropic		ai	always
+Mistral		ai	always
+Whisper		ai	always
+Copilot		ai	always
+Perplexity		ai	always
+Hugging Face		ai	always
+vLLM		ai	always
+LM Studio		ai	always
+DeepSeek		ai	always
+Qwen		ai	always
+Grok Build	grok build	ai	always
+GPT-4		ai	always
+React		framework	always
+Next.js	next js	framework	always
+Node.js	node js	framework	always
+Vue.js	vue js	framework	always
+Angular		framework	always
+Svelte		framework	always
+Express.js	express js	framework	always
+Django		framework	always
+Flask		framework	always
+FastAPI	fast api	framework	always
+Laravel		framework	always
+Rails		framework	always
+Spring Boot	spring boot	framework	code
+jQuery		framework	always
+Redux		framework	always
+Bootstrap		framework	always
+Flutter		framework	always
+ASP.NET	asp dot net	framework	always
+.NET	dot net	framework	code
+SvelteKit	svelte kit	framework	always
+NestJS	nest js	framework	always
+Nuxt		framework	always
+Remix		framework	always
+Astro		framework	always
+Hono		framework	always
+Koa		framework	always
+Fastify		framework	always
+Vite		framework	always
+webpack	web pack	framework	always
+Jest		framework	always
+Playwright		framework	always
+Vitest		framework	always
+Mocha		framework	always
+Cypress		framework	always
+lodash		framework	always
+axios		framework	always
+Zod		framework	always
+ajv		framework	always
+RxJS		framework	always
+Sequelize		framework	always
+Mongoose		framework	always
+Socket.IO		framework	always
+Three.js	three js	framework	always
+React Native	react native	framework	always
+Android		framework	always
+iOS		framework	always
+WordPress		framework	always
+Pandas		framework	always
+NumPy		framework	always
+Hibernate		framework	always
+Maven		framework	always
+Selenium		framework	always
+chalk		framework	always
+commander		framework	always
+uuid		framework	always
+nanoid		framework	always
+glob		framework	always
+yargs		framework	always
+debug		framework	always
+semver		framework	always
+cheerio		framework	always
+inquirer		framework	always
+moment		framework	always
+bluebird		framework	always
+underscore		framework	always
+core-js		framework	always
+prop-types		framework	always
+react-dom		framework	always
+body-parser		framework	always
+minimist		framework	always
+fs-extra		framework	always
+rimraf		framework	always
+shelljs		framework	always
+js-yaml		framework	always
+winston		framework	always
+request		framework	always
+async		framework	always
+classnames		framework	always
+ora		framework	always
+sharp		framework	always
+cors		framework	always
+dayjs		framework	always
+jsonwebtoken		framework	always
+marked		framework	always
+pino		framework	always
+morgan		framework	always
+helmet		framework	always
+puppeteer		framework	always
+bcrypt		framework	always
+knex		framework	always
+bull		framework	always
+joi		framework	always
+ioredis		framework	always
+mysql2		framework	always
+Tailwind	tail wind	framework	code
+Ruby on Rails	ruby on rails	framework	always
+TypeScript	type script	language	always
+JavaScript	java script	language	always
+Python		language	always
+Swift		language	always
+Go		language	always
+Rust		language	always
+Kotlin		language	always
+SQL	sequel	language	code
+Java		language	always
+C#	c sharp	language	code
+PHP		language	always
+C++	c plus plus	language	always
+Ruby		language	always
+HTML		language	always
+CSS		language	always
+Bash		language	always
+R		language	always
+Dart		language	always
+Scala		language	always
+Objective-C	objective c	language	always
+Shell		language	always
+PowerShell		language	always
+C		language	always
+kubectl	cube control|kube control|kube ctl	cli	always
+npm	n p m	cli	always
+pnpm	p n p m	cli	always
+bun		cli	always
+gh		cli	always
+cargo		cli	always
+pip		cli	always
+brew		cli	always
+aws		cli	always
+gcloud		cli	always
+az		cli	always
+terraform		cli	always
+curl		cli	always
+yarn		cli	always
+npx		cli	always
+ESLint	es lint	cli	always
+Prettier		cli	always
+make		cli	always
+ssh		cli	always
+helm		cli	always
+pulumi		cli	always
+jq		cli	always
+psql		cli	always
+wget		cli	always
+rsync		cli	always
+JSON	j son	format	always
+YAML	yam l|ya ml|yamel	format	always
+TOML		format	always
+CSV		format	always
+XML		format	always
+Markdown		format	always
+GraphQL	graph q l	format	always
+Protobuf		format	always
+PDF		format	always
+JSON	jason|jayson|jay son	format	code
+PostgreSQL	post gres|post gres ql|postgres ql	database	always
+MySQL	my sequel	database	code
+SQLite	sequel lite	database	always
+Redis		database	always
+MongoDB	mongo d b	database	always
+schema		database	always
+Elasticsearch	elastic search	database	always
+migration		database	always
+primary key		database	always
+foreign key		database	always
+Cassandra		database	always
+Snowflake		database	always
+MariaDB		database	always
+Neo4j		database	always
+Oracle		database	always
+PR	pee are	git	code
+pull request		git	always
+commit		git	always
+rebase		git	always
+cherry-pick	cherry pick	git	code
+merge		git	always
+push		git	always
+pull		git	always
+fetch		git	always
+clone		git	always
+stash		git	always
+checkout		git	always
+branch		git	always
+diff		git	always
+reset		git	always
+revert		git	always
+status		git	always
+log		git	always
+tag		git	always
+blame		git	always
+bisect		git	always
+camelCase	camel case	casing	always
+snake_case	snake case	casing	always
+kebab-case	kebab case	casing	always
+PascalCase	pascal case	casing	always
+SCREAMING_SNAKE_CASE	screaming snake case	casing	always
+localhost	local host	env	always
+.env	dot env	env	always
+NODE_ENV	node env	env	code
+127.0.0.1		env	always
+env var		env	always
+API_KEY		env	always
+PORT		env	always
+DATABASE_URL		env	always
+dotenv		env	always

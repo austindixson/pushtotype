@@ -1,4 +1,6 @@
+import CryptoKit
 import Foundation
+import PushToTypeSupport
 
 /// Downloads whisper.cpp ggml weights into Application Support.
 @MainActor
@@ -13,8 +15,7 @@ final class ModelDownloadService: ObservableObject {
     private var task: URLSessionDownloadTask?
 
     var modelsDirectory: URL {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("NotFluid/Models", isDirectory: true)
+        let dir = AppSupport.directory().appendingPathComponent("Models", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
         return dir
     }
@@ -36,7 +37,7 @@ final class ModelDownloadService: ObservableObject {
         isDownloading = true
         progress = 0
         lastError = nil
-        status = "Downloading \(model.ggmlFileName)…"
+        status = "Downloading \(model.displayName) · \(model.downloadSizeLabel)…"
 
         defer { isDownloading = false }
 
@@ -62,16 +63,8 @@ final class ModelDownloadService: ObservableObject {
                                         try FileManager.default.removeItem(at: dest)
                                     }
                                     try FileManager.default.moveItem(at: url, to: dest)
-                                    // Project Models symlink convenience
-                                    let project = FileManager.default.homeDirectoryForCurrentUser
-                                        .appendingPathComponent("Desktop/n0tfluid/Models/\(model.ggmlFileName)")
-                                    try? FileManager.default.createDirectory(
-                                        at: project.deletingLastPathComponent(),
-                                        withIntermediateDirectories: true
-                                    )
-                                    try? FileManager.default.removeItem(at: project)
-                                    try? FileManager.default.createSymbolicLink(at: project, withDestinationURL: dest)
-                                    self.status = "\(model.displayName) ready"
+                                    try self.verifyChecksum(model, at: dest)
+                                    self.status = "\(model.displayName) ready · \(model.downloadSizeLabel)"
                                     self.progress = 1
                                     cont.resume()
                                 } catch {
@@ -90,7 +83,7 @@ final class ModelDownloadService: ObservableObject {
                 delegateQueue: nil
             )
             var request = URLRequest(url: model.downloadURL)
-            request.setValue("n0tfluid/0.2", forHTTPHeaderField: "User-Agent")
+            request.setValue("PushToType/1.0", forHTTPHeaderField: "User-Agent")
             let t = session.downloadTask(with: request)
             self.task = t
             t.resume()
@@ -103,6 +96,31 @@ final class ModelDownloadService: ObservableObject {
         task = nil
         isDownloading = false
         status = "Cancelled"
+    }
+
+    private func verifyChecksum(_ model: WhisperModel, at url: URL) throws {
+        let digest = try FileHash.sha256(of: url)
+        guard digest == model.sha256 else {
+            try? FileManager.default.removeItem(at: url)
+            throw ChecksumMismatch(model: model.displayName)
+        }
+    }
+}
+
+private struct ChecksumMismatch: LocalizedError {
+    var model: String
+    var errorDescription: String? { "\(model) download did not match its checksum" }
+}
+
+private enum FileHash {
+    static func sha256(of url: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: url)
+        defer { try? handle.close() }
+        var hasher = SHA256()
+        while let chunk = try handle.read(upToCount: 1_048_576), !chunk.isEmpty {
+            hasher.update(data: chunk)
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 }
 

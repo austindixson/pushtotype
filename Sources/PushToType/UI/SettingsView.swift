@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import PushToTypeSupport
 
 enum SettingsTab: Hashable {
     case general, speech, dictionary, permissions, about
@@ -11,6 +12,7 @@ struct SettingsView: View {
     @ObservedObject private var dictionary = DictionaryStore.shared
     @State private var newFind = ""
     @State private var newReplace = ""
+    @State private var openAIKey = ""
     @State private var selectedTab: SettingsTab = .general
 
     init(selectedTab: SettingsTab = .general) {
@@ -205,17 +207,17 @@ struct SettingsView: View {
 
                     Toggle("Warm Parakeet on launch", isOn: $appState.warmModelOnLaunch)
 
-                    if appState.parakeetInstallBusy {
+                    if appState.runtimeSetupBusy {
                         ProgressView {
                             Text("Installing… first run can take several minutes")
                                 .font(.caption)
                         }
                     }
 
-                    Button(appState.parakeetInstallBusy ? "Installing…" : "Install / update Parakeet runtime") {
+                    Button(appState.runtimeSetupBusy ? "Installing…" : "Install / update Parakeet runtime") {
                         appState.installParakeetRuntime()
                     }
-                    .disabled(appState.parakeetInstallBusy)
+                    .disabled(appState.runtimeSetupBusy)
 
                     Button("Recheck / warm") {
                         Task {
@@ -223,11 +225,11 @@ struct SettingsView: View {
                             await appState.warmParakeet()
                         }
                     }
-                    .disabled(appState.parakeetInstallBusy)
+                    .disabled(appState.runtimeSetupBusy)
 
-                    if !appState.parakeetInstallLog.isEmpty {
+                    if !appState.runtimeSetupLog.isEmpty {
                         ScrollView {
-                            Text(appState.parakeetInstallLog)
+                            Text(appState.runtimeSetupLog)
                                 .font(.system(.caption2, design: .monospaced))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -237,7 +239,7 @@ struct SettingsView: View {
 
             case .appleSpeech:
                 Section("macOS Speech") {
-                    Text("Zero download. Grant Speech Recognition for live partials and final STT.")
+                    Text("Zero download. Grant Speech Recognition for live partials and final STT. Dev terms are passed as recognition hints.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                     Button("Request Speech permission") {
@@ -245,16 +247,71 @@ struct SettingsView: View {
                         Task { await appState.refreshModelStatus() }
                     }
                 }
+            case .phonon:
+                Section("Phonon 2") {
+                    Text("English dictation on Apple silicon. \(PhononCatalog.model.downloadSizeLabel) model, CC-BY-4.0, downloaded when you ask. Checksum pinned.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Link("Fermion Research · Phonon 2", destination: PhononCatalog.model.pageURL)
+                    setupButton("Download Phonon 2") { appState.installPhonon() }
+                }
+            case .openAI:
+                openAISection
+            case .bark30, .bark30Clean, .bark30Plus:
+                Section(appState.transcriptionEngine.displayName) {
+                    Text("Conway Research Underdog Bark. MLX on Apple silicon. \(appState.transcriptionEngine.detail)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    if let bark = appState.transcriptionEngine.barkModel {
+                        Link(bark.model.repo, destination: bark.model.pageURL)
+                    }
+                    setupButton("Download \(appState.transcriptionEngine.displayName)") { appState.installBark() }
+                }
             }
         }
         .formStyle(.grouped)
         .padding()
     }
 
+    private var openAISection: some View {
+        Section("OpenAI") {
+            Text("gpt-4o-transcribe, with whisper-1 if that model is unavailable. The key stays in the Keychain.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            SecureField("API key", text: $openAIKey)
+            HStack {
+                Button("Save key") {
+                    appState.saveOpenAIKey(openAIKey)
+                    openAIKey = ""
+                }
+                .disabled(openAIKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Remove key") {
+                    appState.clearOpenAIKey()
+                    openAIKey = ""
+                }
+            }
+            Text(appState.openAIKeySaved ? "A key is saved." : "No key saved.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private func setupButton(_ title: String, action: @escaping () -> Void) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button(appState.runtimeSetupBusy ? "Installing…" : title, action: action)
+                .disabled(appState.runtimeSetupBusy)
+            if !appState.runtimeSetupLog.isEmpty {
+                Text(appState.runtimeSetupLog)
+                    .font(.system(.caption2, design: .monospaced))
+                    .textSelection(.enabled)
+            }
+        }
+    }
+
     private var dictionaryTab: some View {
         Form {
             Section("Replacements") {
-                Text("Applied after speech-to-text (case-insensitive). Longer matches win.")
+                Text("Your replacements run after the built-in dev dictionary. Longer matches win. Single words stay inside word boundaries.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 ForEach(dictionary.entries) { e in
@@ -334,7 +391,7 @@ struct SettingsView: View {
     private var aboutTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("PushToType").font(.title2.weight(.bold))
-            Text("Local Mac dictation — Whisper or macOS Speech, Terminal-aware paste, smart punctuation, live partials.")
+            Text("Mac dictation. Local engines keep audio on this Mac. OpenAI sends a recording only when you select that engine.")
                 .foregroundStyle(.secondary)
             Divider()
             Group {

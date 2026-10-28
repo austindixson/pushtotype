@@ -1,6 +1,7 @@
 import Foundation
 import Speech
 import AVFoundation
+import PushToTypeSupport
 
 enum AppleSpeechError: LocalizedError {
     case notAuthorized
@@ -111,6 +112,7 @@ actor AppleSpeechService {
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
         request.requiresOnDeviceRecognition = onDevice
+        request.contextualStrings = DevLexicon.contextualStrings()
 
         return try await withCheckedThrowingContinuation { cont in
             var finished = false

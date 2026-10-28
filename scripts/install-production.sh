@@ -8,7 +8,7 @@ cd "$ROOT"
 echo "→ Building production app…"
 "$ROOT/scripts/build-app.sh"
 
-SRC="$ROOT/dist/NotFluid.app"
+SRC="$ROOT/dist/PushToType.app"
 # Ship under the product name users expect
 DEST_NAME="PushToType.app"
 STAGE="$ROOT/dist/$DEST_NAME"
@@ -43,9 +43,9 @@ fi
 
 if [[ -n "$IDENTITY" ]]; then
   echo "→ Re-signing $DEST_NAME with stable identity…"
-  if [[ -f "$ROOT/Resources/NotFluid.entitlements" ]]; then
+  if [[ -f "$ROOT/Resources/PushToType.entitlements" ]]; then
     codesign --force --deep --sign "$IDENTITY" \
-      --entitlements "$ROOT/Resources/NotFluid.entitlements" \
+      --entitlements "$ROOT/Resources/PushToType.entitlements" \
       --timestamp=none "$STAGE" || codesign --force --deep --sign "$IDENTITY" --timestamp=none "$STAGE"
   else
     codesign --force --deep --sign "$IDENTITY" --timestamp=none "$STAGE"
@@ -56,7 +56,7 @@ fi
 xattr -cr "$STAGE" 2>/dev/null || true
 
 # Install
-pkill -x NotFluid 2>/dev/null || true
+pkill -x PushToType 2>/dev/null || true
 pkill -x PushToType 2>/dev/null || true
 sleep 0.2
 
@@ -77,4 +77,4 @@ echo
 echo "Launch: open -a PushToType"
 echo "Or from Spotlight: PushToType"
 echo
-echo "Enable Accessibility once: System Settings → Privacy → Accessibility → PushToType / NotFluid"
+echo "Enable Accessibility once: System Settings → Privacy → Accessibility → PushToType / PushToType"

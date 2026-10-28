@@ -1,4 +1,5 @@
 import Foundation
+import PushToTypeSupport
 
 enum WhisperError: LocalizedError {
     case binaryMissing
@@ -35,8 +36,7 @@ actor WhisperService {
     private let supportDir: URL
 
     init() {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("NotFluid", isDirectory: true)
+        let base = AppSupport.directory()
         supportDir = base
         modelsDir = base.appendingPathComponent("Models", isDirectory: true)
         try? FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
@@ -83,74 +83,57 @@ actor WhisperService {
         }
 
         let modelPath = try resolveModelPath(model)
-
-        // Capture already converts to 16 kHz mono — skip a second ffmpeg (saves ~50–150ms)
         let wavURL = try await ensureWhisperFriendlyWAV(audioURL)
-
-        // Short push-to-talk clips: greedy decode + pinned language is much faster than full beam/auto
-        let lang = (language == "auto" || language.isEmpty) ? "auto" : language
-        let threads = max(2, min(6, ProcessInfo.processInfo.activeProcessorCount - 1))
-
-        var args: [String] = [
-            "-m", modelPath.path,
-            "-f", wavURL.path,
-            "-nt",
-            "-np",
-            "-t", "\(threads)",
-            "-l", lang,
-            // Greedy (beam 1) — big win on short dictation; accuracy still solid for speech
-            "-bs", "1",
-            "-nth", "0.5",
-            "-lpt", "-1.0",
-            "-sns"
-        ]
-
-        if mode == .translate {
-            args.append("-tr")
-        }
-
         let outBase = FileManager.default.temporaryDirectory
-            .appendingPathComponent("notfluid-out-\(UUID().uuidString)")
-        args += ["-of", outBase.path, "-otxt"]
-
+            .appendingPathComponent("pushtotype-out-\(UUID().uuidString)")
+        let args = whisperArguments(modelPath: modelPath, wavURL: wavURL, outBase: outBase, mode: mode, language: language)
         let result = try await runProcess(binary: binary, arguments: args)
         if wavURL != audioURL {
             try? FileManager.default.removeItem(at: wavURL)
         }
-
         if result.exitCode != 0 {
             let err = result.stderr.trimmingCharacters(in: .whitespacesAndNewlines)
             throw WhisperError.processFailed(err.isEmpty ? "whisper-cli exited \(result.exitCode)" : err)
         }
-
-        let txtURL = URL(fileURLWithPath: outBase.path + ".txt")
-        var cleaned = ""
-        if let data = try? Data(contentsOf: txtURL),
-           let text = String(data: data, encoding: .utf8) {
-            try? FileManager.default.removeItem(at: txtURL)
-            cleaned = postProcess(text)
-        }
-        if cleaned.isEmpty {
-            cleaned = postProcess(result.stdout)
-        }
+        let cleaned = readWhisperOutput(outBase: outBase, stdout: result.stdout)
         if cleaned.isEmpty { throw WhisperError.emptyOutput }
+        if isSilenceHallucination(cleaned) { throw WhisperError.emptyOutput }
+        return cleaned
+    }
 
-        // Common silence hallucination — treat as empty so UI can say "no speech"
+    private func whisperArguments(
+        modelPath: URL,
+        wavURL: URL,
+        outBase: URL,
+        mode: DictationMode,
+        language: String
+    ) -> [String] {
+        let lang = (language == "auto" || language.isEmpty) ? "auto" : language
+        let threads = max(2, min(6, ProcessInfo.processInfo.activeProcessorCount - 1))
+        var args = [
+            "-m", modelPath.path, "-f", wavURL.path, "-nt", "-np",
+            "-t", "\(threads)", "-l", lang, "-bs", "1", "-nth", "0.5", "-lpt", "-1.0", "-sns",
+        ]
+        if mode == .translate { args.append("-tr") }
+        args += ["-of", outBase.path, "-otxt"]
+        return args
+    }
+
+    private func readWhisperOutput(outBase: URL, stdout: String) -> String {
+        let txtURL = URL(fileURLWithPath: outBase.path + ".txt")
+        if let data = try? Data(contentsOf: txtURL), let text = String(data: data, encoding: .utf8) {
+            try? FileManager.default.removeItem(at: txtURL)
+            let cleaned = postProcess(text)
+            if !cleaned.isEmpty { return cleaned }
+        }
+        return postProcess(stdout)
+    }
+
+    private func isSilenceHallucination(_ cleaned: String) -> Bool {
         let lower = cleaned.lowercased()
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .trimmingCharacters(in: CharacterSet(charactersIn: ".!?"))
-        let hallucinations: Set<String> = [
-            "you", "thank you", "thanks for watching", "thanks for listening",
-            "subscribe", "the", "a", "i", "yeah", "yes", "okay", "ok", "hmm", "uh"
-        ]
-        if hallucinations.contains(lower) {
-            // Keep short real answers like "yes" only if audio was long — caller already checks length
-            // Still return it; AppState can show it. Prefer returning for "yes"/"ok" but not "you" alone.
-            if lower == "you" || lower == "thank you" || lower == "thanks for watching" {
-                throw WhisperError.emptyOutput
-            }
-        }
-        return cleaned
+        return lower == "you" || lower == "thank you" || lower == "thanks for watching"
     }
 
     /// Only re-encode if capture didn't already produce a 16 kHz mono WAV.
@@ -220,12 +203,15 @@ actor WhisperService {
            FileManager.default.fileExists(atPath: project.path) {
             return project
         }
+        let legacy = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("NotFluid/Models/\(model.ggmlFileName)")
+        if FileManager.default.fileExists(atPath: legacy.path) { return legacy }
 
         throw WhisperError.modelMissing(model.ggmlFileName)
     }
 
     private func projectModelsDir() -> URL? {
-        // Walk up from CWD for dev runs: .../n0tfluid/Models
+        // Walk up from CWD for dev runs: .../pushtotype/Models
         var dir = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
         for _ in 0..<6 {
             let candidate = dir.appendingPathComponent("Models")
@@ -235,7 +221,7 @@ actor WhisperService {
             dir.deleteLastPathComponent()
         }
         let home = FileManager.default.homeDirectoryForCurrentUser
-        for rel in ["Desktop/PushToType/Models", "Desktop/n0tfluid/Models"] {
+        for rel in ["Desktop/PushToType/Models", "Desktop/pushtotype/Models"] {
             let candidate = home.appendingPathComponent(rel)
             if FileManager.default.fileExists(atPath: candidate.path) { return candidate }
         }

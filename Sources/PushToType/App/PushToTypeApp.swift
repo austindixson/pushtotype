@@ -2,7 +2,7 @@ import SwiftUI
 import AppKit
 
 @main
-struct NotFluidApp: App {
+struct PushToTypeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var appState = AppState.shared
 

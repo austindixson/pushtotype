@@ -1,4 +1,5 @@
 import Foundation
+import PushToTypeSupport
 
 enum ParakeetError: LocalizedError {
     case runtimeMissing
@@ -26,47 +27,6 @@ enum ParakeetError: LocalizedError {
     }
 }
 
-enum ParakeetModel: String, CaseIterable, Identifiable {
-    /// English TDT 0.6B v2 — best speed/accuracy for EN dictation
-    case tdt06bV2 = "tdt-0.6b-v2"
-    /// Multilingual TDT 0.6B v3 — 25 European languages
-    case tdt06bV3 = "tdt-0.6b-v3"
-
-    var id: String { rawValue }
-
-    var displayName: String {
-        switch self {
-        case .tdt06bV2: return "Parakeet TDT 0.6B v2 (English) ⭐"
-        case .tdt06bV3: return "Parakeet TDT 0.6B v3 (Multilingual)"
-        }
-    }
-
-    var detail: String {
-        switch self {
-        case .tdt06bV2:
-            return "NVIDIA · ~600M · int8 ONNX · fastest local dictation · English"
-        case .tdt06bV3:
-            return "NVIDIA · ~600M · int8 ONNX · 25 European languages · auto-detect"
-        }
-    }
-
-    /// Name passed to onnx-asr
-    var onnxAsrName: String {
-        switch self {
-        case .tdt06bV2: return "nemo-parakeet-tdt-0.6b-v2"
-        case .tdt06bV3: return "nemo-parakeet-tdt-0.6b-v3"
-        }
-    }
-
-    /// Local cache folder under Application Support/NotFluid/Models/parakeet/
-    var localDirName: String {
-        switch self {
-        case .tdt06bV2: return "tdt-0.6b-v2-int8"
-        case .tdt06bV3: return "tdt-0.6b-v3-int8"
-        }
-    }
-}
-
 /// NVIDIA Parakeet via onnx-asr (persistent Python worker keeps model warm).
 actor ParakeetService {
     private var process: Process?
@@ -76,27 +36,15 @@ actor ParakeetService {
     private var ready = false
     private let lockQueue = DispatchQueue(label: "parakeet.worker.io")
 
-    private var supportDir: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-            .appendingPathComponent("NotFluid", isDirectory: true)
-    }
+    private var supportDir: URL { AppSupport.directory() }
 
     private var venvPython: URL {
         supportDir.appendingPathComponent("parakeet-venv/bin/python")
     }
 
     private var workerScript: URL {
-        let inSupport = supportDir.appendingPathComponent("parakeet_worker.py")
-        if FileManager.default.fileExists(atPath: inSupport.path) { return inSupport }
-        // Dev / Resources next to bundle
-        if let res = Bundle.main.resourceURL?.appendingPathComponent("parakeet_worker.py"),
-           FileManager.default.fileExists(atPath: res.path) {
-            return res
-        }
-        // Project path
-        let desktop = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Desktop/PushToType/Resources/parakeet_worker.py")
-        return desktop
+        if let bundled = BundledScript.url(named: "parakeet_worker.py") { return bundled }
+        return supportDir.appendingPathComponent("parakeet_worker.py")
     }
 
     private func modelDir(_ model: ParakeetModel) -> URL {

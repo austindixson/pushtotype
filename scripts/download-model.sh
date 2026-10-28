@@ -1,20 +1,38 @@
 #!/usr/bin/env bash
-# Download a whisper.cpp ggml model into Application Support + project Models/
+# Download a whisper.cpp ggml model into Application Support.
+# Checksums match WhisperModel in Sources/PushToTypeSupport/EngineCatalog.swift.
 set -euo pipefail
 
 MODEL_ID="${1:-small}"
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-PROJECT_MODELS="$ROOT/Models"
-APP_SUPPORT="$HOME/Library/Application Support/NotFluid/Models"
+APP_SUPPORT="${HOME}/Library/Application Support/PushToType/Models"
+WHISPER_REV="5359861c739e955e79d9a303bcbc70fb988958b1"
+DISTIL_REV="9e4a67ca4569c30be43a3fe7fba1621e504f0093"
 
 case "$MODEL_ID" in
-  tiny)   FILE="ggml-tiny.bin" ;;
-  base)   FILE="ggml-base.bin" ;;
-  small)  FILE="ggml-small.bin" ;;
-  small.en) FILE="ggml-small.en.bin" ;;
+  tiny)
+    FILE="ggml-tiny.bin"
+    URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/${WHISPER_REV}/${FILE}"
+    SHA="be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"
+    ;;
+  base)
+    FILE="ggml-base.bin"
+    URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/${WHISPER_REV}/${FILE}"
+    SHA="60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe"
+    ;;
+  small)
+    FILE="ggml-small.bin"
+    URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/${WHISPER_REV}/${FILE}"
+    SHA="1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b"
+    ;;
+  small.en)
+    FILE="ggml-small.en.bin"
+    URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/${WHISPER_REV}/${FILE}"
+    SHA="c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d"
+    ;;
   distill-small.en|distil-small.en)
     FILE="ggml-distil-small.en.bin"
-    MODEL_ID="distil-small.en"
+    URL="https://huggingface.co/distil-whisper/distil-small.en/resolve/${DISTIL_REV}/${FILE}"
+    SHA="7691eb11167ab7aaf6b3e05d8266f2fd9ad89c550e433f86ac266ebdee6c970a"
     ;;
   *)
     echo "Unknown model: $MODEL_ID"
@@ -23,42 +41,17 @@ case "$MODEL_ID" in
     ;;
 esac
 
-# Official ggml models hosted for whisper.cpp
-BASE_URL="https://huggingface.co/ggerganov/whisper.cpp/resolve/main"
-URL="$BASE_URL/$FILE"
-
-mkdir -p "$PROJECT_MODELS" "$APP_SUPPORT"
-
+mkdir -p "$APP_SUPPORT"
 if [[ -f "$APP_SUPPORT/$FILE" ]]; then
-  echo "✓ Already downloaded: $APP_SUPPORT/$FILE"
-  # Keep project copy in sync for dev
-  ln -sf "$APP_SUPPORT/$FILE" "$PROJECT_MODELS/$FILE" 2>/dev/null || cp -n "$APP_SUPPORT/$FILE" "$PROJECT_MODELS/$FILE" || true
+  echo "$SHA  $APP_SUPPORT/$FILE" | shasum -a 256 -c -
+  echo "Already downloaded: $APP_SUPPORT/$FILE"
   exit 0
 fi
 
-echo "Downloading Whisper model: $FILE"
-echo "  from $URL"
-echo "  into $APP_SUPPORT"
-echo "(This is the best small open-source dictation + translation model stack.)"
-echo
-
+echo "Downloading $FILE"
+echo "  $URL"
 TMP="$(mktemp)"
-if command -v curl >/dev/null; then
-  curl -L --fail --progress-bar -o "$TMP" "$URL"
-elif command -v wget >/dev/null; then
-  wget -O "$TMP" "$URL"
-else
-  echo "Need curl or wget"
-  exit 1
-fi
-
+curl -L --fail --progress-bar -o "$TMP" "$URL"
+echo "$SHA  $TMP" | shasum -a 256 -c -
 mv "$TMP" "$APP_SUPPORT/$FILE"
-ln -sf "$APP_SUPPORT/$FILE" "$PROJECT_MODELS/$FILE" 2>/dev/null || cp "$APP_SUPPORT/$FILE" "$PROJECT_MODELS/$FILE"
-
-SIZE=$(du -h "$APP_SUPPORT/$FILE" | awk '{print $1}')
-echo
-echo "✓ Saved $FILE ($SIZE)"
-echo "  App path:     $APP_SUPPORT/$FILE"
-echo "  Project path: $PROJECT_MODELS/$FILE"
-echo
-echo "Default recommendation: small (multilingual + translate-to-English)"
+echo "Saved $APP_SUPPORT/$FILE"

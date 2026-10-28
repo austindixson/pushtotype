@@ -1,14 +1,22 @@
-# PushToType (n0tfluid)
+# PushToType
 
-**Mac-native push-to-talk dictation** — local-first, glass UI, Terminal-aware paste, **Articulate** mode for AI prompts.
+**Mac push-to-talk dictation.** Local engines keep audio on your Mac. Glass menu-bar UI, Terminal-aware paste, and Articulate mode for AI prompts.
 
 Repo: [github.com/austindixson/pushtotype](https://github.com/austindixson/pushtotype)
 
-- **100% on-device** — audio never leaves your Mac  
-- **SwiftUI menu-bar app** — real AppKit/Swift, not Electron  
-- **Engine choice** — **macOS Speech** (zero download) or **Whisper** (download open models)  
-- **Push-to-talk** — hold `Right ⌥`, speak, release → text pastes into any app (including **Terminal**)  
-- **Articulate** — offline restructuring for AI prompts / project ideas  
+- **Local by default** — macOS Speech, Whisper, Parakeet, Phonon 2, and Bark run on the Mac. OpenAI is optional and sends audio only when you pick it.
+- **SwiftUI menu-bar app** — AppKit/Swift
+- **Push-to-talk** — hold `Right ⌥`, speak, release. Text pastes into the app you were typing in, including Terminal.
+- **Articulate** — offline restructuring for AI prompts and project ideas
+- **Dev dictionary** — spoken names like "ver cell" and "engine x" are corrected after transcription
+
+The default engine is one line, `DictationDefaults.engine` in `Sources/PushToTypeSupport/EngineCatalog.swift`. A benchmark will choose it. See [docs/benchmarks.md](./docs/benchmarks.md).
+
+## From the maker of Super Notch
+
+Super Notch is mission control for your AI coding agents, $20 once.
+
+https://www.supernotch.ai/?utm_source=github&utm_medium=readme&utm_campaign=pushtotype
 
 Full roadmap: **[BUILD_PLAN.md](./BUILD_PLAN.md)**
 
@@ -18,27 +26,40 @@ Full roadmap: **[BUILD_PLAN.md](./BUILD_PLAN.md)**
 
 | Model | Size | Dictation | Translate → EN | Notes |
 |-------|------|-----------|----------------|-------|
-| **Whisper Small** ⭐ | ~466 MB | Excellent | Yes | Best small balance |
-| Whisper Base | ~142 MB | Good | Yes | Faster, lighter |
-| Whisper Tiny | ~75 MB | OK | Yes | Lowest resource |
-| Small.en | ~466 MB | Excellent EN | No | English-only sharpening |
-| Distil-small.en | ~166 MB | Strong EN | No | Fast distilled English |
+| **Whisper Small** | 488 MB | Strong | Yes | Multilingual plus translate |
+| Whisper Base | 148 MB | Good | Yes | Faster, lighter |
+| Whisper Tiny | 78 MB | OK | Yes | Smallest ggml file |
+| Small.en | 488 MB | English | No | English-only |
+| Distil-small.en | 336 MB | English | No | Official ggml from distil-whisper |
 
-FluidVoice leans on Parakeet for raw speed (great for English). **n0tfluid** bets on **Whisper** because it’s still the strongest small *open* model that does **both** multilingual dictation **and** speech translation — via [whisper.cpp](https://github.com/ggerganov/whisper.cpp) with Metal on Apple Silicon.
+Sizes are the files Hugging Face serves, in decimal MB. Distil-small.en used to point at a missing file on `ggerganov/whisper.cpp` and was labeled 166 MB. The file that actually exists is `distil-whisper/distil-small.en` `ggml-distil-small.en.bin`, 336,191,657 bytes.
+
+Whisper still does multilingual dictation and speech translation through [whisper.cpp](https://github.com/ggerganov/whisper.cpp). Parakeet, Phonon 2, and Bark are faster English (or, for Parakeet v3, multilingual) options and do not translate.
 
 ---
 
-## Features (v0.2)
+## Features
 
 - Global **push-to-talk** with presets (Right ⌥ / Right ⌘ / F13 / ⌥Space)
-- **Dictate** · **Translate → English** · **Rewrite selection**
-- **macOS Speech** or **Whisper** + **speed presets** (Fast English / Balanced)
-- **Live partials** in the overlay while you hold the hotkey
-- **Fast auto-paste** — GUI (AX) + Terminal (⌘V path)
-- **Smart punctuation**, **dictionary** replacements, app-aware cleanup
-- **Permission doctor** chips in the menu
-- **In-app Whisper model download**
-- History search / pin / export · Quit / Test paste
+- **Dictate**, **Translate → English** (Whisper), **Rewrite selection**, **Articulate**
+- Engines:
+  - **macOS Speech** (`SFSpeechRecognizer`) — no download
+  - **Whisper** — whisper.cpp, ggml models downloaded on request
+  - **Parakeet** — NVIDIA Parakeet TDT 0.6B v2 and v3, int8 ONNX via onnx-asr
+  - **Phonon 2** — Fermion Research, English, Apple silicon, MLX
+  - **Bark 3.0**, **Bark 3.0 Clean**, **Bark 3.0 Plus** — Conway Research Underdog Bark, MLX on Apple silicon
+  - **OpenAI** — `gpt-4o-transcribe`, then `whisper-1`, with your API key in the Keychain
+- Dev-jargon dictionary (hosting, frameworks, languages, and the spoken forms people actually say) plus your own replacements
+- **Live partials** in the overlay while you hold the hotkey (macOS Speech)
+- **Auto-paste** — GUI (Accessibility) and Terminal (⌘V)
+- **Smart punctuation** and app-aware cleanup
+- Permission chips in the menu
+- In-app model download, with size and SHA-256 check
+- History search / pin / export
+
+Bark 2.0 4-bit is not included. That Hugging Face repo is a different package (MLX safetensors and ONNX), not the `model.bark` file the Bark 3.0 loader reads.
+
+Model ids, URLs, sizes, and runtimes are listed in [docs/benchmarks.md](./docs/benchmarks.md). Licenses are in [NOTICE](./NOTICE).
 
 ---
 
@@ -100,11 +121,15 @@ Prioritized backlog (detail in [BUILD_PLAN.md](./BUILD_PLAN.md)):
 ## Quick start
 
 ```bash
-cd ~/Desktop/n0tfluid
-./scripts/run.sh          # build if needed + launch (avoids Gatekeeper trash)
+git clone https://github.com/austindixson/pushtotype.git
+cd pushtotype
+./scripts/setup.sh        # Homebrew whisper.cpp, Whisper Small, then build
+./scripts/run.sh          # launch (clears quarantine if Gatekeeper marked the app)
 ```
 
-First-time Whisper setup:
+`./scripts/run.sh` alone builds first if `dist/PushToType.app` is missing.
+
+Whisper Small only, if you already have the toolchain:
 
 ```bash
 brew install whisper-cpp
@@ -112,16 +137,31 @@ brew install whisper-cpp
 ./scripts/run.sh
 ```
 
+Other engines are downloaded from Settings after you select them. Parakeet, Phonon 2, and Bark need Apple silicon for their local runtimes. macOS Speech needs no download.
+
+### If you used an older build
+
+The bundle id changed from `dev.n0tfluid.app` to `dev.pushtotype.app`, and files moved from `~/Library/Application Support/NotFluid` to `~/Library/Application Support/PushToType`.
+
+On first launch the app copies the old support folder when the new one is absent, and copies UserDefaults from the old preferences domain when you have not chosen an engine yet. macOS ties Microphone, Speech Recognition, and Accessibility to the bundle id, so grant those again for PushToType.
+
 ### Permissions
 
 1. **Microphone**  
 2. **Accessibility** (required to paste into other apps / Terminal)  
 3. **Speech Recognition** (only if using macOS Speech engine)  
 
-System Settings → Privacy & Security → enable **NotFluid**.  
+System Settings → Privacy & Security → enable **PushToType**.  
 After an ad-hoc rebuild, re-check Accessibility if paste stops working.
 
-If macOS blocks the app: right-click `dist/NotFluid.app` → **Open**, or use `./scripts/run.sh`.
+Release builds from GitHub Actions are ad-hoc signed (`codesign -s -`), not notarized. macOS will warn the first time. Right-click `PushToType.app` → **Open**, or in Terminal:
+
+```bash
+xattr -cr PushToType.app
+open PushToType.app
+```
+
+`./scripts/run.sh` clears the quarantine attribute and re-signs ad-hoc if the signature is missing. A local Apple Development certificate, when you have one, is still preferred so Accessibility survives rebuilds. The tag workflow does not have a signing certificate, so it always uses the ad-hoc signature.
 
 ---
 
@@ -134,19 +174,19 @@ If macOS blocks the app: right-click `dist/NotFluid.app` → **Open**, or use `.
 | See result | Overlay shows transcript after paste |
 | Copy / paste last | Menu bar panel |
 | Test paste | Menu → **Test paste** (click a text field first) |
-| Quit | Menu → **Quit n0tfluid** |
+| Quit | Menu → **Quit PushToType** |
 
 ---
 
 ## Project layout
 
 ```
-n0tfluid/
+pushtotype/
 ├── BUILD_PLAN.md       # Full roadmap & phases
-├── Sources/NotFluid/
+├── Sources/PushToType/
 │   ├── App/            # SwiftUI app + AppState
 │   ├── Audio/          # 16 kHz mono WAV capture
-│   ├── Transcription/  # Whisper + Apple Speech
+│   ├── Transcription/  # Speech, Whisper, Parakeet, Phonon, Bark, OpenAI
 │   ├── Input/          # Hotkey + text injection (Terminal-aware)
 │   ├── UI/             # Menu bar, overlay, settings
 │   ├── Models/
@@ -154,7 +194,7 @@ n0tfluid/
 ├── Resources/
 ├── scripts/            # run, build, setup, download-model
 ├── Models/             # local ggml (gitignored)
-└── dist/NotFluid.app
+└── dist/PushToType.app
 ```
 
 ---
@@ -162,7 +202,7 @@ n0tfluid/
 ## Dev
 
 ```bash
-swift build -c release --product NotFluid
+swift build -c release --product PushToType
 ./scripts/build-app.sh
 ./scripts/run.sh
 
@@ -187,19 +227,27 @@ Compares offline paths on fixed fixtures (no mic):
 ./scripts/benchmark-boost.sh
 ```
 
-Models: `~/Library/Application Support/NotFluid/Models/`
+Models: `~/Library/Application Support/PushToType/Models/`
 
 ---
 
 ## Privacy
 
-- No accounts, no cloud STT by default  
-- Temporary WAVs deleted after transcription  
-- History is local JSON only  
+There is no analytics, telemetry, or account. The only network calls in the app are:
+
+- **Model downloads**, when you start them: Hugging Face for Whisper, Parakeet, Bark, and Phonon 2 weights. Phonon setup also downloads the uv installer from GitHub and Python packages from PyPI. Parakeet and Bark setup install their Python packages from PyPI.
+- **OpenAI transcription**, only if that engine is selected: `POST https://api.openai.com/v1/audio/transcriptions` with the recording and your key. The key is stored in the Keychain under `dev.pushtotype.app`. It is not in the source.
+
+Temporary WAV files are deleted after transcription. History is a local JSON file. The dev dictionary and your replacements stay on disk in Application Support.
+
 ---
 
 ## License
 
-MIT — yours to hack on.
+MIT. See [LICENSE](./LICENSE).
+
+Third-party models keep their own licenses. Parakeet, Phonon 2, and the Bark models are CC-BY-4.0. Attribution is in [NOTICE](./NOTICE). Weights are not in this repository.
+
+Bark models: Conway Research, Underdog Bark 3.0, 3.0 Clean, and 3.0 Plus. NVIDIA Parakeet TDT 0.6B v3 is an upstream of Phonon 2 and Bark, and v2/v3 are what the Parakeet engine runs (ONNX builds by istupakov, same CC-BY-4.0).
 
 Not affiliated with FluidVoice / altic-dev.

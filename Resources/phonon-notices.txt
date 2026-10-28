@@ -1,0 +1,9 @@
+Phonon 2 by Fermion Research
+https://huggingface.co/FermionResearch/Phonon-2
+https://www.fermionresearch.com/models/phonon-2/
+Model weights: Creative Commons Attribution 4.0 International (CC-BY-4.0)
+https://creativecommons.org/licenses/by/4.0/
+Based on NVIDIA Parakeet TDT 0.6B v3. PushToType downloads the weights unchanged.
+fermion-research runtime: Apache License 2.0
+https://github.com/fermionresearch/phonon
+Runtime dependencies retain their licenses in the installed environment.
