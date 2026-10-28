@@ -1,4 +1,4 @@
-# n0tfluid — Build Plan & Suggested Improvements
+# pushtotype — Build Plan & Suggested Improvements
 
 Living roadmap. **v0.2 executed** major Phase A–D items below.
 
@@ -80,7 +80,7 @@ Living roadmap. **v0.2 executed** major Phase A–D items below.
 ## How to run
 
 ```bash
-cd ~/Desktop/n0tfluid
+cd ~/Desktop/pushtotype
 ./scripts/run.sh
 # optional stable sign:
 ./scripts/sign-stable.sh && ./scripts/run.sh

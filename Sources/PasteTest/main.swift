@@ -18,7 +18,7 @@ struct PasteTestMain {
         }
         print("AX trusted:", AXIsProcessTrusted())
 
-        let marker = "n0tfluid-paste-ok-\(Int(Date().timeIntervalSince1970))"
+        let marker = "pushtotype-paste-ok-\(Int(Date().timeIntervalSince1970))"
         print("Marker:", marker)
 
         var err: NSDictionary?
@@ -39,7 +39,7 @@ struct PasteTestMain {
         te.activate()
         Thread.sleep(forTimeInterval: 0.4)
 
-        // Target-app-scoped AX (what NotFluid now does)
+        // Target-app-scoped AX (what PushToType now does)
         let appEl = AXUIElementCreateApplication(te.processIdentifier)
         var focusedRef: CFTypeRef?
         let okFocus = AXUIElementCopyAttributeValue(

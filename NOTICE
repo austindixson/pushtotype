@@ -1,0 +1,109 @@
+PushToType
+Copyright 2026 Austin Dixson
+
+This application is MIT licensed. See LICENSE.
+
+Model weights are not included in this repository. The app downloads them when
+you ask, unchanged, and checks the SHA-256 listed in
+Sources/PushToTypeSupport/EngineCatalog.swift.
+
+================================================================================
+NVIDIA Parakeet TDT 0.6B v3
+================================================================================
+
+Author: NVIDIA Corporation
+Model: Parakeet TDT 0.6B v3
+Link: https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+License: Creative Commons Attribution 4.0 International (CC-BY-4.0)
+https://creativecommons.org/licenses/by/4.0/
+Changes: none in this repository. PushToType does not modify the weights.
+
+The Parakeet engine downloads the int8 ONNX build
+istupakov/parakeet-tdt-0.6b-v3-onnx (CC-BY-4.0), which is a format conversion
+of the NVIDIA model. Revision 8f23f0c03c8761650bdb5b40aaf3e40d2c15f1ce.
+
+The English Parakeet option is istupakov/parakeet-tdt-0.6b-v2-onnx, a format
+conversion of NVIDIA Parakeet TDT 0.6B v2
+(https://huggingface.co/nvidia/parakeet-tdt-0.6b-v2), also CC-BY-4.0.
+Revision 0bbb45a3365852604aef28b538a8f066f4ccaa85.
+Changes: none in this repository.
+
+================================================================================
+Phonon 2
+================================================================================
+
+Author: Fermion Research
+Model: Phonon 2
+Link: https://huggingface.co/FermionResearch/Phonon-2
+License: CC-BY-4.0 for the weights. The fermion-research 0.2.4 runtime is
+Apache License 2.0 (https://github.com/fermionresearch/phonon).
+Changes: none in this repository. Fermion Research describes its own changes
+from NVIDIA Parakeet TDT 0.6B v3 on the model card. PushToType downloads the
+published archive and does not modify it.
+
+================================================================================
+Underdog Bark 3.0
+================================================================================
+
+Author: Conway Research
+Model: Underdog Bark 3.0
+Link: https://huggingface.co/ConwayResearch/Underdog-Bark-3.0
+Revision: 85db2ad18ab41e534a222ee253c29191d77ed919
+License: CC-BY-4.0
+Changes: none. PushToType downloads model.bark and the loader files at this
+revision and does not modify the weights.
+
+This model derives from nvidia/parakeet-tdt-0.6b-v3 (NVIDIA Corporation,
+CC-BY-4.0) and moondream/parakeet-ultra (Moondream, CC-BY-4.0). Conway
+Research post-trained and compressed it. Those changes are theirs, not ours.
+
+================================================================================
+Underdog Bark 3.0 Clean
+================================================================================
+
+Author: Conway Research
+Model: Underdog Bark 3.0 Clean
+Link: https://huggingface.co/ConwayResearch/Underdog-Bark-3.0-Clean
+Revision: 6d34ed8639b2b9a33e764acf06748519bbb950cf
+License: CC-BY-4.0
+Changes: none by PushToType.
+
+Same upstream models as Bark 3.0. This variant is trained to drop fillers and
+false starts. That training is Conway Research's.
+
+================================================================================
+Underdog Bark 3.0 Plus
+================================================================================
+
+Author: Conway Research
+Model: Underdog Bark 3.0 Plus
+Link: https://huggingface.co/ConwayResearch/Underdog-Bark-3.0-Plus
+Revision: d4fab2f8b95681e5ad3cfb4e8c5f4e0c009b3deb
+License: CC-BY-4.0
+Changes: none by PushToType.
+
+Same upstream models and the same model.bark loader as Bark 3.0.
+
+================================================================================
+Whisper and Distil-Whisper
+================================================================================
+
+OpenAI Whisper and whisper.cpp are MIT licensed.
+https://github.com/openai/whisper
+https://github.com/ggerganov/whisper.cpp
+
+Distil-Whisper Small EN is MIT licensed.
+Author: Distil-Whisper / Hugging Face
+Link: https://huggingface.co/distil-whisper/distil-small.en
+The ggml file used here is ggml-distil-small.en.bin at revision
+9e4a67ca4569c30be43a3fe7fba1621e504f0093.
+Changes: none.
+
+================================================================================
+Other runtimes
+================================================================================
+
+onnx-asr loads the Parakeet ONNX files. mlx and mlx-audio run Bark.
+uv (Apache-2.0) installs the Phonon Python environment.
+Those packages keep their own licenses inside the environment the setup
+scripts create on your Mac. They are not vendored as source in this repo.

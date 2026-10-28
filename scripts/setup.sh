@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# One-shot setup for n0tfluid
+# One-shot setup for pushtotype
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
 
-echo "═══ n0tfluid setup ═══"
+echo "═══ pushtotype setup ═══"
 echo
 
 if ! command -v brew >/dev/null; then
@@ -28,6 +28,6 @@ echo "→ Building app…"
 
 echo
 echo "═══ Ready ═══"
-echo "Launch: open \"$ROOT/dist/NotFluid.app\""
+echo "Launch: open \"$ROOT/dist/PushToType.app\""
 echo "Then grant Microphone + Accessibility when prompted."
 echo "Hold Right ⌥ to dictate. Switch to Translate mode for any-language → English."

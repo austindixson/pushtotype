@@ -1,0 +1,29 @@
+name: Release app
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  macos-app:
+    runs-on: macos-14
+    steps:
+      - name: Check out
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Build an ad-hoc signed app
+        run: PUSHTOTYPE_ADHOC=1 ./scripts/build-app.sh
+
+      - name: Zip the app
+        run: ditto -c -k --keepParent dist/PushToType.app dist/PushToType-macos.zip
+
+      - name: Upload the zip
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: PushToType-macos
+          path: dist/PushToType-macos.zip
+          if-no-files-found: error
