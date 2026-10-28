@@ -22,6 +22,22 @@ final class DictionaryCorrectionTests: XCTestCase {
         XCTAssertEqual(DevLexicon.correct("use cloud run", profile: .code), "use Cloud Run")
     }
 
+    func testMultiWordFindDoesNotMatchInsideNeighboringWords() {
+        let pairs = [ReplacementPair(find: "you know", replace: "YK")]
+        XCTAssertEqual(
+            DictionaryReplacements.apply("do you knowledge", pairs: pairs),
+            "do you knowledge"
+        )
+        XCTAssertEqual(
+            DictionaryReplacements.apply("bayou know", pairs: pairs),
+            "bayou know"
+        )
+        XCTAssertEqual(
+            DictionaryReplacements.apply("you know what", pairs: pairs),
+            "YK what"
+        )
+    }
+
     func testSingleTokenDoesNotMatchInsideAnotherWord() {
         let text = DictionaryReplacements.apply(
             "medium",

@@ -17,7 +17,7 @@ Pull request: https://github.com/austindixson/pushtotype/pull/1
 - The app name is PushToType. The bundle id is `dev.pushtotype.app`. The first launch copies `~/Library/Application Support/NotFluid` and the old preferences domain `dev.n0tfluid.app` when the new locations are empty. Microphone, Speech Recognition, and Accessibility have to be granted again.
 - Distil-small.en downloads `ggml-distil-small.en.bin` from `distil-whisper/distil-small.en` (336,191,657 bytes, SHA-256 pinned). The old `ggerganov/whisper.cpp` URL 404s.
 - README quick start is a clone of this repo, not `~/Desktop/n0tfluid`.
-- User dictionary finds match whole words only, so kube → k8s no longer fires inside kubectl.
+- User dictionary finds match whole words only, including phrases. kube → k8s does not fire inside kubectl, and you know → YK does not fire inside "you knowledge" or "bayou know".
 - User dictionary replacements are literal. `$1` and backslashes are not regex templates. An empty replacement deletes the matched word. Leading and trailing whitespace on a replacement is trimmed, and a whitespace-only replacement still deletes the word.
 - Bark's `bark_mlx.py` and `bark_loader.py` are checked against a pinned SHA-256 before they run.
 - The idle overlay label is PUSHTOTYPE.

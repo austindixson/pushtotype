@@ -147,9 +147,6 @@ public enum DictionaryReplacements {
 
     private static func pattern(for find: String) -> String {
         let escaped = NSRegularExpression.escapedPattern(for: find)
-        if find.contains(where: { $0.isWhitespace }) {
-            return "(?i)" + escaped
-        }
         return "(?i)(?<![A-Za-z0-9])" + escaped + "(?![A-Za-z0-9])"
     }
 }
