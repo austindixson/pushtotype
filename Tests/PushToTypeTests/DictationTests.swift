@@ -39,6 +39,31 @@ final class DictionaryCorrectionTests: XCTestCase {
         XCTAssertEqual(text, "use this")
     }
 
+    func testDollarReplacementStaysLiteral() {
+        let text = DictionaryReplacements.apply(
+            "see foo now",
+            pairs: [ReplacementPair(find: "foo", replace: "$1 tag")]
+        )
+        XCTAssertEqual(text, "see $1 tag now")
+    }
+
+    func testBackslashReplacementStaysLiteral() {
+        let text = DictionaryReplacements.apply(
+            "see foo now",
+            pairs: [ReplacementPair(find: "foo", replace: "\\n")]
+        )
+        XCTAssertEqual(text, "see \\n now")
+    }
+
+    func testEmptyReplacementDeletesTheMatch() {
+        let text = DictionaryReplacements.apply(
+            "see foo now",
+            pairs: [ReplacementPair(find: "foo", replace: "")]
+        )
+        XCTAssertEqual(text, "see  now")
+        XCTAssertFalse(DictionaryPairPolicy.isBlocked(find: "foo", replace: ""))
+    }
+
     func testUserPairWinsOverTheLexicon() {
         let text = DictationCorrections.apply(
             "ver cell",
@@ -85,6 +110,8 @@ final class EngineSelectionTests: XCTestCase {
             XCTAssertEqual(file.sha256.count, 64)
             XCTAssertGreaterThan(file.bytes, 1_000_000)
             XCTAssertTrue(bark.model.runtime.contains("mlx-audio"))
+            XCTAssertEqual(bark.loaderFiles.map(\.name), ["bark_mlx.py", "bark_loader.py"])
+            XCTAssertTrue(bark.loaderChecksumJSON.contains(bark.loaderFiles[0].sha256))
             XCTAssertEqual(bark.engine.barkModel, bark)
         }
     }

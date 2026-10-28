@@ -247,6 +247,6 @@ struct OverlayView: View {
         if appState.statusText.contains("✓") { return "DONE" }
         if appState.statusText.contains("⌘V") { return "CLIPBOARD" }
         if appState.statusText.hasPrefix("Failed") { return "ERROR" }
-        return "N0TFLUID"
+        return "PUSHTOTYPE"
     }
 }

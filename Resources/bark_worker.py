@@ -55,11 +55,34 @@ def require(name: str) -> str:
     return value
 
 
+def helper_checksums() -> dict:
+    raw = os.environ.get("BARK_HELPERS", "").strip()
+    if not raw:
+        raise RuntimeError("Bark loader checksums were not provided")
+    parsed = json.loads(raw)
+    if not isinstance(parsed, dict) or "bark_mlx.py" not in parsed or "bark_loader.py" not in parsed:
+        raise RuntimeError("Bark loader checksums are incomplete")
+    return {str(name): str(digest) for name, digest in parsed.items()}
+
+
+def ensure_named(root: Path, base: str, name: str, expected: str | None) -> None:
+    dest = root / name
+    if expected and dest.exists() and sha256(dest) == expected:
+        return
+    if expected is None and dest.exists() and dest.stat().st_size > 0:
+        return
+    download(f"{base}/{name}", dest)
+    if expected and sha256(dest) != expected:
+        dest.unlink(missing_ok=True)
+        raise RuntimeError(f"{name} checksum did not match the pinned SHA-256")
+
+
 def ensure_files(root: Path) -> Path:
     repo = require("BARK_REPO")
     revision = require("BARK_REVISION")
     expected = require("BARK_SHA256")
     weight_url = require("BARK_URL")
+    helpers = helper_checksums()
     weight = root / "model.bark"
     if not weight.exists() or sha256(weight) != expected:
         download(weight_url, weight)
@@ -69,10 +92,7 @@ def ensure_files(root: Path) -> Path:
         raise RuntimeError("Bark weight checksum did not match the pinned SHA-256")
     base = f"https://huggingface.co/{repo}/resolve/{revision}"
     for relative in COMPANIONS:
-        dest = root / relative
-        if dest.exists() and dest.stat().st_size > 0:
-            continue
-        download(f"{base}/{relative}", dest)
+        ensure_named(root, base, relative, helpers.get(relative))
     return weight
 
 

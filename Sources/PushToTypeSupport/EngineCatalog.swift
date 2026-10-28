@@ -340,6 +340,32 @@ public enum BarkModel: String, CaseIterable, Identifiable, Sendable {
         }
     }
 
+    /// Scripts the Bark loader executes. Checksums are for the pinned revision.
+    public var loaderFiles: [RemoteFile] {
+        switch self {
+        case .v3, .v3Plus:
+            return Self.sharedLoaderFiles
+        case .v3Clean:
+            return Self.cleanLoaderFiles
+        }
+    }
+
+    public var loaderChecksumJSON: String {
+        let object = Dictionary(uniqueKeysWithValues: loaderFiles.map { ($0.name, $0.sha256) })
+        guard let data = try? JSONSerialization.data(withJSONObject: object) else { return "{}" }
+        return String(data: data, encoding: .utf8) ?? "{}"
+    }
+
+    private static let sharedLoaderFiles = [
+        RemoteFile(name: "bark_mlx.py", bytes: 5_011, sha256: "79b976c8711a0a16a6d013d7ff365db73af05edabe0c8fb297e39ad7a54b92a1"),
+        RemoteFile(name: "bark_loader.py", bytes: 5_820, sha256: "e86b7f130bec1a8fa14dd315cfce95785b890dbd30000f6ceb2597fdd4312b02"),
+    ]
+
+    private static let cleanLoaderFiles = [
+        RemoteFile(name: "bark_mlx.py", bytes: 5_007, sha256: "5ee2653f6cd4f2d85b3494413f44205a5ccdfa04a40368307edc4abc00f299ff"),
+        RemoteFile(name: "bark_loader.py", bytes: 5_819, sha256: "97ee639ccfc9359a2ea8d9e9d253a630149932e9da629ce0d1363b9b44ec21ba"),
+    ]
+
     public var model: HuggingFaceModel {
         switch self {
         case .v3:

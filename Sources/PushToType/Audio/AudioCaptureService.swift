@@ -57,7 +57,7 @@ final class AudioCaptureService {
         engine.reset()
 
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("notfluid-raw-\(UUID().uuidString).caf")
+            .appendingPathComponent("pushtotype-raw-\(UUID().uuidString).caf")
         rawURL = url
         peakLevel = 0
         framesWritten = 0
@@ -171,7 +171,7 @@ final class AudioCaptureService {
         // Prefer ffmpeg → reliable s16le 16k mono
         if let ffmpeg = resolveFFmpeg() {
             let out = FileManager.default.temporaryDirectory
-                .appendingPathComponent("notfluid-16k-\(UUID().uuidString).wav")
+                .appendingPathComponent("pushtotype-16k-\(UUID().uuidString).wav")
             let proc = Process()
             proc.executableURL = URL(fileURLWithPath: ffmpeg)
             proc.arguments = [

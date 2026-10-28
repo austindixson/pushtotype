@@ -263,7 +263,7 @@ actor ParakeetService {
 
     private func ensureWav(_ url: URL) async throws -> URL {
         let name = url.lastPathComponent
-        if name.hasPrefix("notfluid-16k-"), name.hasSuffix(".wav") {
+        if name.hasSuffix(".wav"), name.hasPrefix("pushtotype-16k-") || name.hasPrefix("notfluid-16k-") {
             return url
         }
         let ffmpegCandidates = ["/opt/homebrew/bin/ffmpeg", "/usr/local/bin/ffmpeg"]
@@ -271,7 +271,7 @@ actor ParakeetService {
             return url
         }
         let out = FileManager.default.temporaryDirectory
-            .appendingPathComponent("notfluid-16k-\(UUID().uuidString).wav")
+            .appendingPathComponent("pushtotype-16k-\(UUID().uuidString).wav")
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: ffmpeg)
         proc.arguments = [

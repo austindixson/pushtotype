@@ -139,8 +139,8 @@ actor WhisperService {
     /// Only re-encode if capture didn't already produce a 16 kHz mono WAV.
     private func ensureWhisperFriendlyWAV(_ url: URL) async throws -> URL {
         let name = url.lastPathComponent
-        // AudioCaptureService names converted files `notfluid-16k-*.wav`
-        if name.hasPrefix("notfluid-16k-"), name.hasSuffix(".wav") {
+        // Capture names these `pushtotype-16k-*.wav` (older builds used `notfluid-16k-`).
+        if name.hasSuffix(".wav"), name.hasPrefix("pushtotype-16k-") || name.hasPrefix("notfluid-16k-") {
             return url
         }
         // Already a wav that might be fine — still convert CAF/other containers once
@@ -155,7 +155,7 @@ actor WhisperService {
             return url
         }
         let out = FileManager.default.temporaryDirectory
-            .appendingPathComponent("notfluid-16k-\(UUID().uuidString).wav")
+            .appendingPathComponent("pushtotype-16k-\(UUID().uuidString).wav")
         let result = try await runProcess(
             binary: URL(fileURLWithPath: ffmpeg),
             arguments: [

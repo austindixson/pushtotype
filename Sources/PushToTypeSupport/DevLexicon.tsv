@@ -257,7 +257,6 @@ gh		cli	always
 cargo		cli	always
 pip		cli	always
 brew		cli	always
-aws		cli	always
 gcloud		cli	always
 az		cli	always
 terraform		cli	always

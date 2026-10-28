@@ -86,8 +86,8 @@ public enum DictionaryPairPolicy {
 
     private static func normalized(_ find: String, _ replace: String) -> Pair? {
         let originalFind = find.trimmingCharacters(in: .whitespacesAndNewlines)
-        let originalReplace = replace.trimmingCharacters(in: .whitespacesAndNewlines)
-        if originalFind.isEmpty || originalReplace.isEmpty { return nil }
+        let originalReplace = replace
+        if originalFind.isEmpty { return nil }
         let loweredFind = originalFind.lowercased()
         let loweredReplace = originalReplace.lowercased()
         return Pair(
@@ -106,6 +106,8 @@ public enum DictionaryPairPolicy {
     }
 
     private static func isTruncation(_ pair: Pair) -> Bool {
+        // An empty replacement deletes the match. It is not a truncated word.
+        guard !pair.replace.isEmpty else { return false }
         guard pair.findWords.count == 1, pair.find.hasPrefix(pair.replace), pair.replace.count < pair.find.count else {
             return false
         }
@@ -131,11 +133,10 @@ public enum DictionaryReplacements {
 
     private static func applyOne(_ text: String, pair: ReplacementPair) -> String {
         let find = pair.find.trimmingCharacters(in: .whitespacesAndNewlines)
-        let replace = pair.replace
-        guard !find.isEmpty, find != replace else { return text }
-        guard !DictionaryPairPolicy.isBlocked(find: find, replace: replace) else { return text }
-        let pattern = pattern(for: find)
-        return text.replacingOccurrences(of: pattern, with: replace, options: .regularExpression)
+        guard !find.isEmpty, find != pair.replace else { return text }
+        guard !DictionaryPairPolicy.isBlocked(find: find, replace: pair.replace) else { return text }
+        let template = NSRegularExpression.escapedTemplate(for: pair.replace)
+        return text.replacingOccurrences(of: pattern(for: find), with: template, options: .regularExpression)
     }
 
     private static func pattern(for find: String) -> String {

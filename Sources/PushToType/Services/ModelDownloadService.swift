@@ -150,7 +150,7 @@ private final class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
         didFinishDownloadingTo location: URL
     ) {
         let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("notfluid-model-\(UUID().uuidString).bin")
+            .appendingPathComponent("pushtotype-model-\(UUID().uuidString).bin")
         do {
             try FileManager.default.moveItem(at: location, to: tmp)
             completion(.success(tmp))

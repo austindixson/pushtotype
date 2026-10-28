@@ -88,6 +88,7 @@ actor BarkService {
                 "BARK_REVISION": spec.revision,
                 "BARK_SHA256": weight.sha256,
                 "BARK_URL": spec.fileURL(weight.name).absoluteString,
+                "BARK_HELPERS": model.loaderChecksumJSON,
                 "HF_HUB_OFFLINE": "1",
             ]
         )
