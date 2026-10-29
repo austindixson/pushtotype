@@ -20,8 +20,8 @@ else
   echo "✓ whisper.cpp already installed"
 fi
 
-echo "→ Downloading Whisper Small (best small open model for dictation + translation)…"
-"$ROOT/scripts/download-model.sh" small
+echo "→ Downloading Whisper Small.en (recommended local Whisper model)…"
+"$ROOT/scripts/download-model.sh" small.en
 
 echo "→ Building app…"
 "$ROOT/scripts/build-app.sh"

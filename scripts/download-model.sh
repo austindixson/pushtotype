@@ -3,7 +3,8 @@
 # Checksums match WhisperModel in Sources/PushToTypeSupport/EngineCatalog.swift.
 set -euo pipefail
 
-MODEL_ID="${1:-small}"
+# No argument downloads Whisper Small.en, the recommended local model.
+MODEL_ID="${1:-small.en}"
 APP_SUPPORT="${HOME}/Library/Application Support/PushToType/Models"
 WHISPER_REV="5359861c739e955e79d9a303bcbc70fb988958b1"
 DISTIL_REV="9e4a67ca4569c30be43a3fe7fba1621e504f0093"

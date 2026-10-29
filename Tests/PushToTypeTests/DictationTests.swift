@@ -100,6 +100,37 @@ final class DictionaryCorrectionTests: XCTestCase {
         XCTAssertFalse(DictionaryPairPolicy.isBlocked(find: "foo", replace: ""))
     }
 
+    func testBenchmarkMishearingsBecomeTheWrittenTerms() {
+        XCTAssertEqual(
+            DevLexicon.correct("call use effect in the component", profile: .prose),
+            "call useEffect in the component"
+        )
+        XCTAssertEqual(DevLexicon.correct("call use effects later", profile: .prose), "call use effects later")
+        XCTAssertEqual(DevLexicon.correct("reuse effect later", profile: .code), "reuse effect later")
+        XCTAssertEqual(DevLexicon.correct("Use Effect, then ship.", profile: .prose), "useEffect, then ship.")
+        XCTAssertEqual(
+            DevLexicon.correct("use the open IAPI today", profile: .prose),
+            "use the OpenAI API today"
+        )
+        XCTAssertEqual(
+            DevLexicon.correct("use the openRE API today", profile: .code),
+            "use the OpenAI API today"
+        )
+        XCTAssertEqual(DevLexicon.correct("openRE APIs", profile: .prose), "openRE APIs")
+        XCTAssertEqual(DevLexicon.correct("read the open ai docs", profile: .prose), "read the OpenAI docs")
+        XCTAssertEqual(DevLexicon.correct("run gitribase now", profile: .prose), "run git rebase now")
+        XCTAssertEqual(DevLexicon.correct("run getra base now", profile: .shell), "run git rebase now")
+        XCTAssertEqual(DevLexicon.correct("getra basement", profile: .prose), "getra basement")
+        XCTAssertEqual(DevLexicon.correct("mygitribase", profile: .prose), "mygitribase")
+        XCTAssertEqual(DevLexicon.correct("postgars is up", profile: .prose), "Postgres is up")
+        XCTAssertEqual(DevLexicon.correct("postgas is up", profile: .chat), "Postgres is up")
+        XCTAssertEqual(DevLexicon.correct("postgarsx", profile: .prose), "postgarsx")
+        XCTAssertEqual(DevLexicon.correct("xpostgas", profile: .prose), "xpostgas")
+        XCTAssertEqual(DevLexicon.correct("post gres is up", profile: .prose), "PostgreSQL is up")
+        XCTAssertEqual(DevLexicon.correct("the jason file", profile: .prose), "the jason file")
+        XCTAssertEqual(DevLexicon.correct("the jason file", profile: .code), "the JSON file")
+    }
+
     func testUserPairWinsOverTheLexicon() {
         let text = DictationCorrections.apply(
             "ver cell",
@@ -118,14 +149,81 @@ final class DictionaryCorrectionTests: XCTestCase {
 
 final class EngineSelectionTests: XCTestCase {
     func testMissingOrUnknownValueUsesTheSingleDefault() {
-        XCTAssertEqual(EngineSelection.resolve(stored: nil), DictationDefaults.engine)
-        XCTAssertEqual(EngineSelection.resolve(stored: ""), DictationDefaults.engine)
-        XCTAssertEqual(EngineSelection.resolve(stored: "not-an-engine"), DictationDefaults.engine)
+        XCTAssertEqual(DictationDefaults.engine, .appleSpeech)
+        XCTAssertEqual(EngineSelection.resolve(stored: nil), .appleSpeech)
+        XCTAssertEqual(EngineSelection.resolve(stored: ""), .appleSpeech)
+        XCTAssertEqual(EngineSelection.resolve(stored: "not-an-engine"), .appleSpeech)
     }
 
     func testStoredEngineWinsOverTheDefault() {
+        XCTAssertEqual(EngineSelection.resolve(stored: TranscriptionEngine.appleSpeech.rawValue), .appleSpeech)
         XCTAssertEqual(EngineSelection.resolve(stored: TranscriptionEngine.whisper.rawValue), .whisper)
         XCTAssertEqual(EngineSelection.resolve(stored: TranscriptionEngine.bark30Clean.rawValue), .bark30Clean)
+    }
+
+    func testUnsetWhisperModelIsSmallEnAndASavedModelWins() {
+        XCTAssertEqual(DictationDefaults.whisperModel, .smallEn)
+        XCTAssertEqual(WhisperModel.recommended, .smallEn)
+        XCTAssertEqual(EngineSelection.resolveWhisperModel(stored: nil), .smallEn)
+        XCTAssertEqual(EngineSelection.resolveWhisperModel(stored: ""), .smallEn)
+        XCTAssertEqual(EngineSelection.resolveWhisperModel(stored: "not-a-model"), .smallEn)
+        XCTAssertEqual(EngineSelection.resolveWhisperModel(stored: WhisperModel.small.rawValue), .small)
+        XCTAssertEqual(EngineSelection.resolveWhisperModel(stored: WhisperModel.base.rawValue), .base)
+        XCTAssertEqual(WhisperModel.smallEn.pickerLabel, "Whisper Small (English) · recommended")
+        XCTAssertEqual(WhisperModel.small.pickerLabel, "Whisper Small")
+        XCTAssertTrue(WhisperModel.smallEn.detail.contains("recommended"))
+        XCTAssertFalse(WhisperModel.small.detail.contains("recommended"))
+    }
+
+    func testMissingWhisperModelUsesSpeechForThatTakeOnly() {
+        let reason = WhisperModel.smallEn.unavailableMessage
+        XCTAssertEqual(reason, "Whisper Small (English) is not downloaded. Download the model in the menu")
+        let notice = EngineSelection.whisperUnavailableNotice(reason: reason)
+        XCTAssertEqual(
+            notice,
+            "Whisper Small (English) is not downloaded. Download the model in the menu. This take used macOS Speech."
+        )
+        let missing = EngineSelection.engineForTake(
+            selected: .whisper,
+            whisperReady: false,
+            translating: false,
+            unavailableNotice: notice
+        )
+        XCTAssertEqual(missing.engine, .appleSpeech)
+        XCTAssertEqual(missing.notice, notice)
+        XCTAssertEqual(EngineSelection.resolve(stored: TranscriptionEngine.whisper.rawValue), .whisper)
+
+        let ready = EngineSelection.engineForTake(
+            selected: .whisper,
+            whisperReady: true,
+            translating: false,
+            unavailableNotice: notice
+        )
+        XCTAssertEqual(ready, DictationTakePlan(engine: .whisper, notice: nil))
+
+        let translate = EngineSelection.engineForTake(
+            selected: .whisper,
+            whisperReady: false,
+            translating: true,
+            unavailableNotice: notice
+        )
+        XCTAssertEqual(translate, DictationTakePlan(engine: .whisper, notice: nil))
+
+        let speech = EngineSelection.engineForTake(
+            selected: .appleSpeech,
+            whisperReady: false,
+            translating: false,
+            unavailableNotice: notice
+        )
+        XCTAssertEqual(speech, DictationTakePlan(engine: .appleSpeech, notice: nil))
+        XCTAssertEqual(
+            EngineSelection.whisperUnavailableNotice(reason: "  "),
+            "Whisper is not available. This take used macOS Speech."
+        )
+        XCTAssertEqual(
+            EngineSelection.whisperUnavailableNotice(reason: "Already a sentence."),
+            "Already a sentence. This take used macOS Speech."
+        )
     }
 
     func testDistilModelUsesTheOfficialFileAndSize() {

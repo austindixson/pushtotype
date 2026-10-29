@@ -1,10 +1,22 @@
 import Foundation
 
-/// The engine used when someone has not chosen one yet.
+/// Choices used when someone has not saved one yet.
 ///
-/// A benchmark on a real Mac picks the shipped default. Change `engine` and nothing else.
+/// macOS Speech stays the first-run engine. It needs no download and has not been measured yet.
+/// `whisperModel` is the recommended local model when Whisper is selected.
 public enum DictationDefaults {
     public static let engine: TranscriptionEngine = .appleSpeech
+    public static let whisperModel: WhisperModel = .smallEn
+}
+
+public struct DictationTakePlan: Equatable, Sendable {
+    public var engine: TranscriptionEngine
+    public var notice: String?
+
+    public init(engine: TranscriptionEngine, notice: String?) {
+        self.engine = engine
+        self.notice = notice
+    }
 }
 
 public enum EngineSelection {
@@ -13,6 +25,37 @@ public enum EngineSelection {
             return DictationDefaults.engine
         }
         return engine
+    }
+
+    /// A saved Whisper size wins. An empty or unknown value uses `DictationDefaults.whisperModel`.
+    public static func resolveWhisperModel(stored raw: String?) -> WhisperModel {
+        guard let raw, let model = WhisperModel(rawValue: raw) else {
+            return DictationDefaults.whisperModel
+        }
+        return model
+    }
+
+    /// The saved engine is not changed. Whisper without a local model uses macOS Speech for this take.
+    /// Translate stays on Whisper so a missing model is reported instead of a language switch.
+    public static func engineForTake(
+        selected: TranscriptionEngine,
+        whisperReady: Bool,
+        translating: Bool,
+        unavailableNotice: String
+    ) -> DictationTakePlan {
+        guard selected == .whisper, !whisperReady, !translating else {
+            return DictationTakePlan(engine: selected, notice: nil)
+        }
+        return DictationTakePlan(engine: .appleSpeech, notice: unavailableNotice)
+    }
+
+    public static func whisperUnavailableNotice(reason: String) -> String {
+        let trimmed = reason.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            return "Whisper is not available. This take used macOS Speech."
+        }
+        let sentence = trimmed.hasSuffix(".") ? trimmed : trimmed + "."
+        return "\(sentence) This take used macOS Speech."
     }
 }
 
@@ -184,7 +227,12 @@ public enum WhisperModel: String, CaseIterable, Identifiable, Sendable {
 
     public var id: String { rawValue }
 
-    public static var recommended: WhisperModel { .small }
+    public static var recommended: WhisperModel { DictationDefaults.whisperModel }
+
+    /// Model menu label. The recommended size is marked; other sizes stay plain.
+    public var pickerLabel: String {
+        self == Self.recommended ? "\(displayName) · recommended" : displayName
+    }
 
     private static let whisperRevision = "5359861c739e955e79d9a303bcbc70fb988958b1"
     private static let distilRevision = "9e4a67ca4569c30be43a3fe7fba1621e504f0093"
@@ -227,9 +275,14 @@ public enum WhisperModel: String, CaseIterable, Identifiable, Sendable {
         case .tiny: return "\(downloadSizeLabel) · fastest · lower accuracy · multilingual"
         case .base: return "\(downloadSizeLabel) · fast · good · multilingual"
         case .small: return "\(downloadSizeLabel) · dictation and translate"
-        case .smallEn: return "\(downloadSizeLabel) · English only"
+        case .smallEn: return "\(downloadSizeLabel) · English only · recommended"
         case .distillSmallEn: return "\(downloadSizeLabel) · distilled English · no translate"
         }
+    }
+
+    /// Shown when this Whisper file is not on disk. The take can still use macOS Speech.
+    public var unavailableMessage: String {
+        "\(displayName) is not downloaded. Download the model in the menu"
     }
 
     public var ggmlFileName: String { model.files[0].name }

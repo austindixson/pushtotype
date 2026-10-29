@@ -116,6 +116,7 @@ Ollama		ai	always
 LLM		ai	always
 ChatGPT	chat gpt|chat g p t	ai	always
 OpenAI	open ai	ai	always
+OpenAI API	open IAPI|openRE API	ai	always
 Gemini		ai	always
 Llama		ai	always
 Anthropic		ai	always
@@ -131,6 +132,7 @@ Qwen		ai	always
 Grok Build	grok build	ai	always
 GPT-4		ai	always
 React		framework	always
+useEffect	use effect	framework	always
 Next.js	next js	framework	always
 Node.js	node js	framework	always
 Vue.js	vue js	framework	always
@@ -284,6 +286,7 @@ Protobuf		format	always
 PDF		format	always
 JSON	jason|jayson|jay son	format	code
 PostgreSQL	post gres|post gres ql|postgres ql	database	always
+Postgres	postgars|postgas	database	always
 MySQL	my sequel	database	code
 SQLite	sequel lite	database	always
 Redis		database	always
@@ -302,6 +305,7 @@ PR	pee are	git	code
 pull request		git	always
 commit		git	always
 rebase		git	always
+git rebase	gitribase|getra base	git	always
 cherry-pick	cherry pick	git	code
 merge		git	always
 push		git	always
