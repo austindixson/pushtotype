@@ -128,11 +128,16 @@ public final class LivePartialGate<Request: AnyObject>: @unchecked Sendable {
     private struct State {
         var feeds = false
         var request: Request?
+        var epoch: UInt64 = 0
     }
 
     private let lock = OSAllocatedUnfairLock(initialState: State())
 
     public init() {}
+
+    /// Runs after the snapshot and before the re-check. The gate lock is not held.
+    /// Tests revoke and publish the same request here; production leaves this nil.
+    var betweenSnapshotAndRecheck: (() -> Void)?
 
     public func publish(feeds: Bool, request: Request?) {
         lock.withLock { state in
@@ -141,26 +146,32 @@ public final class LivePartialGate<Request: AnyObject>: @unchecked Sendable {
         }
     }
 
-    /// Clear both fields. The returned request is the one that was live.
+    /// Clear both fields and advance the revoke epoch. The returned request is the one that was live.
     @discardableResult
     public func revoke() -> Request? {
         lock.withLock { state in
             let previous = state.request
             state.feeds = false
             state.request = nil
+            state.epoch &+= 1
             return previous
         }
     }
 
-    /// Snapshot `(feeds, request)` under the lock and append only while that pair is still live.
+    /// Snapshot `(feeds, request, epoch)` under the lock, then append only if that snapshot is still current.
+    /// The append itself runs under the lock.
     @discardableResult
     public func appendIfLive(_ use: (Request) -> Void) -> Bool {
         let snapshot = lock.withLock { state in
-            (feeds: state.feeds, request: state.request)
+            (feeds: state.feeds, request: state.request, epoch: state.epoch)
         }
+        betweenSnapshotAndRecheck?()
         guard snapshot.feeds, let request = snapshot.request else { return false }
         return lock.withLock { state in
-            guard state.feeds, let current = state.request, current === request else { return false }
+            guard state.feeds,
+                  let current = state.request,
+                  current === request,
+                  state.epoch == snapshot.epoch else { return false }
             use(current)
             return true
         }

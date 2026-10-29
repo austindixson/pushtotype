@@ -84,7 +84,7 @@ final class AudioCaptureService {
         activeTranscriptionEngine = transcriptionEngine
         partialGate.revoke()
         if livePartials {
-            _ = beginLiveSpeech(language: language, transcriptionEngine: transcriptionEngine)
+            beginLiveSpeech(language: language, transcriptionEngine: transcriptionEngine)
         }
 
         input.removeTap(onBus: 0)
@@ -242,44 +242,44 @@ extension AudioCaptureService {
         case .replace(let plan):
             endLiveSpeech()
             activeTranscriptionEngine = transcriptionEngine
-            _ = installLiveRequest(plan, language: captureLanguage)
+            installLiveRequest(plan, language: captureLanguage)
         }
     }
 
-    private func beginLiveSpeech(language: String, transcriptionEngine: TranscriptionEngine) -> Bool {
+    private func beginLiveSpeech(language: String, transcriptionEngine: TranscriptionEngine) {
         let auth = SFSpeechRecognizer.authorizationStatus()
         if auth == .notDetermined {
             SFSpeechRecognizer.requestAuthorization { _ in }
-            return false
+            return
         }
-        guard auth == .authorized else { return false }
+        guard auth == .authorized else { return }
 
         let locale = speechLocale(language)
         guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(),
-              recognizer.isAvailable else { return false }
+              recognizer.isAvailable else { return }
 
         let plan = SpeechPrivacy.livePartials(
             engine: transcriptionEngine,
             supportsOnDevice: recognizer.supportsOnDeviceRecognition
         )
-        return installLiveRequest(plan, recognizer: recognizer)
+        installLiveRequest(plan, recognizer: recognizer)
     }
 
-    private func installLiveRequest(_ plan: LivePartialPlan, language: String) -> Bool {
-        guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return false }
+    private func installLiveRequest(_ plan: LivePartialPlan, language: String) {
+        guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return }
         let locale = speechLocale(language)
         guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(),
-              recognizer.isAvailable else { return false }
-        return installLiveRequest(plan, recognizer: recognizer)
+              recognizer.isAvailable else { return }
+        installLiveRequest(plan, recognizer: recognizer)
     }
 
-    private func installLiveRequest(_ plan: LivePartialPlan, recognizer: SFSpeechRecognizer) -> Bool {
+    private func installLiveRequest(_ plan: LivePartialPlan, recognizer: SFSpeechRecognizer) {
         guard let request = LivePartialRequests.make(
             plan: plan,
             makeRequest: { SFSpeechAudioBufferRecognitionRequest() }
         ) else {
             partialGate.revoke()
-            return false
+            return
         }
         request.taskHint = .dictation
         speechRecognizer = recognizer
@@ -293,7 +293,6 @@ extension AudioCaptureService {
             }
         }
         partialGate.publish(feeds: true, request: request)
-        return true
     }
 
     private func endLiveSpeech() {

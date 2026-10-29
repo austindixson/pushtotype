@@ -451,6 +451,21 @@ final class LivePartialGateTests: XCTestCase {
         XCTAssertEqual(appends, 1)
     }
 
+    func testSameRequestRepublishedBetweenSnapshotAndRecheckDoesNotAppend() {
+        let gate = LivePartialGate<NSObject>()
+        let request = NSObject()
+        gate.publish(feeds: true, request: request)
+        var ran = false
+        gate.betweenSnapshotAndRecheck = {
+            _ = gate.revoke()
+            gate.publish(feeds: true, request: request)
+        }
+        defer { gate.betweenSnapshotAndRecheck = nil }
+        // Identity matches again, so this fails only while the revoke epoch is checked.
+        XCTAssertFalse(gate.appendIfLive { _ in ran = true })
+        XCTAssertFalse(ran)
+    }
+
     func testConcurrentRevokeAndAppendDoesNotCrashOrAppendAfterRevoke() {
         let gate = LivePartialGate<NSObject>()
         gate.publish(feeds: true, request: NSObject())
