@@ -132,14 +132,12 @@ public final class LivePartialGate<Request: AnyObject>: @unchecked Sendable {
     }
 
     private let lock = OSAllocatedUnfairLock(initialState: State())
-    /// Mirrors `State.epoch` so an append can read it without taking `lock` again.
-    private let epoch = OSAllocatedUnfairLock(initialState: UInt64(0))
 
     public init() {}
 
-    public func currentEpoch() -> UInt64 {
-        epoch.withLock { $0 }
-    }
+    /// Runs after the snapshot and before the re-check. The gate lock is not held.
+    /// Tests revoke and publish the same request here; production leaves this nil.
+    var betweenSnapshotAndRecheck: (() -> Void)?
 
     public func publish(feeds: Bool, request: Request?) {
         lock.withLock { state in
@@ -156,25 +154,25 @@ public final class LivePartialGate<Request: AnyObject>: @unchecked Sendable {
             state.feeds = false
             state.request = nil
             state.epoch &+= 1
-            let advanced = state.epoch
-            epoch.withLock { $0 = advanced }
             return previous
         }
     }
 
-    /// Snapshot `(feeds, request, epoch)` under the lock and append only while that same epoch is current.
+    /// Snapshot `(feeds, request, epoch)` under the lock, then append only if that snapshot is still current.
+    /// The append itself runs under the lock.
     @discardableResult
-    public func appendIfLive(_ use: (_ request: Request, _ epoch: UInt64) -> Void) -> Bool {
+    public func appendIfLive(_ use: (Request) -> Void) -> Bool {
         let snapshot = lock.withLock { state in
             (feeds: state.feeds, request: state.request, epoch: state.epoch)
         }
+        betweenSnapshotAndRecheck?()
         guard snapshot.feeds, let request = snapshot.request else { return false }
         return lock.withLock { state in
             guard state.feeds,
                   let current = state.request,
                   current === request,
                   state.epoch == snapshot.epoch else { return false }
-            use(current, state.epoch)
+            use(current)
             return true
         }
     }

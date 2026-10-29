@@ -109,7 +109,7 @@ final class AudioCaptureService {
                 // Don't abort the realtime thread
             }
 
-            self.partialGate.appendIfLive { request, _ in
+            self.partialGate.appendIfLive { request in
                 request.append(buffer)
             }
         }

@@ -443,32 +443,39 @@ final class LivePartialGateTests: XCTestCase {
         let request = NSObject()
         gate.publish(feeds: true, request: request)
         var appends = 0
-        XCTAssertTrue(gate.appendIfLive { _, seen in
-            appends += 1
-            XCTAssertEqual(seen, gate.currentEpoch())
-        })
+        XCTAssertTrue(gate.appendIfLive { _ in appends += 1 })
         XCTAssertEqual(appends, 1)
         let revoked = gate.revoke()
         XCTAssertTrue(revoked === request)
-        XCTAssertEqual(gate.currentEpoch(), 1)
-        XCTAssertFalse(gate.appendIfLive { _, _ in appends += 1 })
+        XCTAssertFalse(gate.appendIfLive { _ in appends += 1 })
         XCTAssertEqual(appends, 1)
+    }
+
+    func testSameRequestRepublishedBetweenSnapshotAndRecheckDoesNotAppend() {
+        let gate = LivePartialGate<NSObject>()
+        let request = NSObject()
+        gate.publish(feeds: true, request: request)
+        var ran = false
+        gate.betweenSnapshotAndRecheck = {
+            _ = gate.revoke()
+            gate.publish(feeds: true, request: request)
+        }
+        defer { gate.betweenSnapshotAndRecheck = nil }
+        // Identity matches again, so this fails only while the revoke epoch is checked.
+        XCTAssertFalse(gate.appendIfLive { _ in ran = true })
+        XCTAssertFalse(ran)
     }
 
     func testConcurrentRevokeAndAppendDoesNotCrashOrAppendAfterRevoke() {
         let gate = LivePartialGate<NSObject>()
         gate.publish(feeds: true, request: NSObject())
         let appends = LivePartialAppendCount()
-        let stale = LivePartialAppendCount()
         let group = DispatchGroup()
         for _ in 0..<6 {
             group.enter()
             DispatchQueue.global().async {
                 for _ in 0..<300 {
-                    gate.appendIfLive { _, seen in
-                        if seen < gate.currentEpoch() {
-                            stale.add()
-                        }
+                    gate.appendIfLive { _ in
                         appends.add()
                     }
                 }
@@ -484,14 +491,10 @@ final class LivePartialGateTests: XCTestCase {
         }
         group.wait()
         let settled = appends.value
-        XCTAssertFalse(gate.appendIfLive { _, seen in
-            if seen < gate.currentEpoch() {
-                stale.add()
-            }
+        XCTAssertFalse(gate.appendIfLive { _ in
             appends.add()
         })
         XCTAssertEqual(appends.value, settled)
-        XCTAssertEqual(stale.value, 0)
     }
 }
 
