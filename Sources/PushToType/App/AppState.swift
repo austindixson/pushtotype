@@ -535,7 +535,7 @@ final class AppState: ObservableObject {
             try audio.start(
                 livePartials: wantsLivePartials,
                 language: language,
-                engine: transcriptionEngine
+                transcriptionEngine: transcriptionEngine
             )
             sessionID = UUID()
             isRecording = true
