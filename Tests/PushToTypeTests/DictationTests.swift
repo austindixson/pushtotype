@@ -290,6 +290,89 @@ final class EngineSelectionTests: XCTestCase {
         XCTAssertTrue(livePartialPlanLeavesTheMac(speechUnsupported))
     }
 
+    func testSwitchingFromSpeechToWhisperDuringATakeDropsServerPartials() {
+        let onDevice = SpeechPrivacy.reviseLivePartials(
+            activeEngine: .appleSpeech,
+            newEngine: .whisper,
+            partialsEnabled: true,
+            supportsOnDevice: true
+        )
+        XCTAssertEqual(onDevice, .replace(.recognize(requiresOnDeviceRecognition: true)))
+
+        let unavailable = SpeechPrivacy.reviseLivePartials(
+            activeEngine: .appleSpeech,
+            newEngine: .whisper,
+            partialsEnabled: true,
+            supportsOnDevice: false
+        )
+        XCTAssertEqual(unavailable, .replace(.skip))
+
+        XCTAssertEqual(
+            SpeechPrivacy.reviseLivePartials(
+                activeEngine: .whisper,
+                newEngine: .whisper,
+                partialsEnabled: true,
+                supportsOnDevice: true
+            ),
+            .unchanged
+        )
+        XCTAssertEqual(
+            SpeechPrivacy.reviseLivePartials(
+                activeEngine: .appleSpeech,
+                newEngine: .whisper,
+                partialsEnabled: false,
+                supportsOnDevice: true
+            ),
+            .unchanged
+        )
+    }
+
+    func testLivePartialPlanWiresTheRequestFlag() {
+        final class FakeRequest: LivePartialSpeechRequest {
+            var requiresOnDeviceRecognition = false
+            var shouldReportPartialResults = false
+        }
+
+        var made = 0
+        let onDevice = LivePartialRequests.make(plan: .recognize(requiresOnDeviceRecognition: true)) {
+            made += 1
+            return FakeRequest()
+        }
+        XCTAssertEqual(made, 1)
+        XCTAssertEqual(onDevice?.requiresOnDeviceRecognition, true)
+        XCTAssertEqual(onDevice?.shouldReportPartialResults, true)
+
+        let server = LivePartialRequests.make(plan: .recognize(requiresOnDeviceRecognition: false)) {
+            made += 1
+            return FakeRequest()
+        }
+        XCTAssertEqual(server?.requiresOnDeviceRecognition, false)
+
+        let beforeSkip = made
+        let skipped = LivePartialRequests.make(plan: .skip) {
+            made += 1
+            return FakeRequest()
+        }
+        XCTAssertNil(skipped)
+        XCTAssertEqual(made, beforeSkip)
+
+        let speechToWhisper = SpeechPrivacy.reviseLivePartials(
+            activeEngine: .appleSpeech,
+            newEngine: .whisper,
+            partialsEnabled: true,
+            supportsOnDevice: false
+        )
+        guard case .replace(let plan) = speechToWhisper else {
+            return XCTFail("Expected the server partial request to be replaced")
+        }
+        let replacement = LivePartialRequests.make(plan: plan) {
+            made += 1
+            return FakeRequest()
+        }
+        XCTAssertNil(replacement)
+        XCTAssertEqual(made, beforeSkip)
+    }
+
     func testChosenSpeechCanStillRetryOffDevice() {
         let first = SpeechPrivacy.firstRequest(
             route: .chosenEngine,
