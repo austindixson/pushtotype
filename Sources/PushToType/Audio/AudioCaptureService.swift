@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import Speech
+import PushToTypeSupport
 
 enum AudioCaptureError: LocalizedError {
     case noInputDevice
@@ -43,7 +44,7 @@ final class AudioCaptureService {
 
     var isRecording: Bool { isRunning }
 
-    func start(livePartials: Bool, language: String) throws {
+    func start(livePartials: Bool, language: String, transcriptionEngine: TranscriptionEngine) throws {
         guard !isRunning else { return }
         try ensureMicrophonePermissionSyncSafe()
         guard AVCaptureDevice.default(for: .audio) != nil else {
@@ -75,7 +76,7 @@ final class AudioCaptureService {
             throw AudioCaptureError.engineFailed("Could not open audio file: \(error.localizedDescription)")
         }
 
-        let feedSpeech = livePartials && beginLiveSpeech(language: language)
+        let feedSpeech = livePartials && beginLiveSpeech(language: language, transcriptionEngine: transcriptionEngine)
 
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buffer, _ in
@@ -209,7 +210,7 @@ final class AudioCaptureService {
 
     // MARK: - Live Speech
 
-    private func beginLiveSpeech(language: String) -> Bool {
+    private func beginLiveSpeech(language: String, transcriptionEngine: TranscriptionEngine) -> Bool {
         let auth = SFSpeechRecognizer.authorizationStatus()
         if auth == .notDetermined {
             SFSpeechRecognizer.requestAuthorization { _ in }
@@ -222,12 +223,18 @@ final class AudioCaptureService {
             : Locale(identifier: language)
         guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(),
               recognizer.isAvailable else { return false }
+
+        let plan = SpeechPrivacy.livePartials(
+            engine: transcriptionEngine,
+            supportsOnDevice: recognizer.supportsOnDeviceRecognition
+        )
+        guard case .recognize(let onDevice) = plan else { return false }
         speechRecognizer = recognizer
 
         let request = SFSpeechAudioBufferRecognitionRequest()
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
-        request.requiresOnDeviceRecognition = false
+        request.requiresOnDeviceRecognition = onDevice
         recognitionRequest = request
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, _ in

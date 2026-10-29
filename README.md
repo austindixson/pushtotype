@@ -4,7 +4,7 @@
 
 Repo: [github.com/austindixson/pushtotype](https://github.com/austindixson/pushtotype)
 
-- **Local by default** — macOS Speech, Whisper, Parakeet, Phonon 2, and Bark run on the Mac. OpenAI is optional and sends audio only when you pick it.
+- **Local by default** — Whisper, Parakeet, Phonon 2, and Bark keep audio on your Mac. macOS Speech is built in and, when you choose it, can send audio to Apple. OpenAI is optional and sends audio only when you pick it.
 - **SwiftUI menu-bar app** — AppKit/Swift
 - **Push-to-talk** — hold `Right ⌥`, speak, release. Text pastes into the app you were typing in, including Terminal.
 - **Articulate** — offline restructuring for AI prompts and project ideas
@@ -45,14 +45,14 @@ Whisper still does multilingual dictation and speech translation through [whispe
 - Global **push-to-talk** with presets (Right ⌥ / Right ⌘ / F13 / ⌥Space)
 - **Dictate**, **Translate → English** (Whisper), **Rewrite selection**, **Articulate**
 - Engines:
-  - **macOS Speech** (`SFSpeechRecognizer`) — no download
+  - **macOS Speech** (`SFSpeechRecognizer`) — no download. Choosing this engine can send audio to Apple, including live partials
   - **Whisper** — whisper.cpp. Small.en is the recommended model. Multilingual Small still translates. Models download when you ask
   - **Parakeet** — NVIDIA Parakeet TDT 0.6B v2 and v3, int8 ONNX via onnx-asr
   - **Phonon 2** — Fermion Research, English, Apple silicon, MLX
   - **Bark 3.0**, **Bark 3.0 Clean**, **Bark 3.0 Plus** — Conway Research Underdog Bark, MLX on Apple silicon
   - **OpenAI** — `gpt-4o-transcribe`, then `whisper-1`, with your API key in the Keychain
 - Dev-jargon dictionary (hosting, frameworks, languages, and the spoken forms people actually say) plus your own replacements
-- **Live partials** in the overlay while you hold the hotkey (macOS Speech)
+- **Live partials** in the overlay while you hold the hotkey. On-device for every engine except macOS Speech, which can use Apple's servers
 - **Auto-paste** — GUI (Accessibility) and Terminal (⌘V)
 - **Smart punctuation** and app-aware cleanup
 - Permission chips in the menu
@@ -237,10 +237,15 @@ Models: `~/Library/Application Support/PushToType/Models/`
 
 ## Privacy
 
+Local engines keep audio on your Mac. Whisper, Parakeet, Phonon 2, and Bark do not send the recording or live partials off this Mac. If on-device recognition is unavailable, those engines skip live partials instead of sending them to Apple.
+
+macOS Speech is the exception. When you choose that engine, recognition can use Apple's servers, including the words that appear while you hold the hotkey.
+
 There is no analytics, telemetry, or account. The only network calls in the app are:
 
 - **Model downloads**, when you start them: Hugging Face for Whisper, Parakeet, Bark, and Phonon 2 weights. Phonon setup also downloads the uv installer from GitHub and Python packages from PyPI. Parakeet and Bark setup install their Python packages from PyPI.
 - **OpenAI transcription**, only if that engine is selected: `POST https://api.openai.com/v1/audio/transcriptions` with the recording and your key. The key is stored in the Keychain under `dev.pushtotype.app`. It is not in the source.
+- **macOS Speech**, only if you choose that engine: Apple may receive the audio for recognition and for live partials. The other engines do not use that path.
 
 Temporary WAV files are deleted after transcription. History is a local JSON file. The dev dictionary and your replacements stay on disk in Application Support.
 
