@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- A live partial is sent only when the revoke count it just read is still current, so a buffer cannot slip out after the request was cleared.
+- A live partial is sent only when the revoke count it just read is still current, so a buffer cannot slip out after the request was cleared. Pull request: https://github.com/austindixson/pushtotype/pull/6
 
 ### Pull request 5
 
