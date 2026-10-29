@@ -895,15 +895,15 @@ final class AppState: ObservableObject {
                 unavailableNotice: EngineSelection.whisperUnavailableNotice(reason: status.message)
             )
             if plan.engine == .appleSpeech {
-                do {
-                    let text = try await appleSpeech.transcribe(audioURL: url, language: language, mode: mode)
-                    takeNotice = plan.notice
-                    return text
-                } catch {
-                    takeNotice = nil
-                    let notice = plan.notice ?? status.message
-                    throw WhisperError.processFailed("\(notice) \(error.localizedDescription)")
-                }
+                let text = try await appleSpeech.transcribe(
+                    audioURL: url,
+                    language: language,
+                    mode: mode,
+                    route: .whisperFallback,
+                    whisperMessage: status.message
+                )
+                takeNotice = plan.notice
+                return text
             }
             if !status.ready {
                 throw WhisperError.processFailed(status.message)

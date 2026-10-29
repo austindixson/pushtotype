@@ -31,13 +31,13 @@ How the numbers were measured:
 | Whisper Base | 15.6% → 11.9% | 21 → 26 | 8.1% | 27.0% | 0.46 s / 0.62 s | 2.4 s |
 | Whisper Small | 11.0% → 7.8% | 25 → 29 | 5.2% | 25.9% | 0.93 s / 1.31 s | 4.9 s |
 | **Whisper Small.en** | **5.5% → 4.6%** | **31 → 32** | 3.2% | 8.0% | 0.72 s / 1.00 s | 5.3 s |
-| Distil-Whisper Small EN | 17.0% → 11.0% | 18 → 26 | 4.1% | 44.9% (loops) | 0.56 s / 0.70 s | 7.6 s |
+| Distil-Whisper Small EN | 17.0% → 11.0% | 18 → 26 | 4.1% | 44.9% (loops) | 0.56 s / 0.72 s | 7.6 s |
 | Parakeet TDT 0.6B v2 int8 | 6.4% → 4.6% | 30 → 32 | **2.3%** | **2.9%** | 0.69 s / 2.06 s | 22.5 s |
 | Parakeet TDT 0.6B v3 int8 | 6.9% → 4.6% | 29 → 32 | 4.1% | 4.7% | 0.78 s / 2.31 s | 28.4 s |
 | Phonon 2 | 13.8% → 9.6% | 21 → 26 | 2.6% | 4.4% | **0.11 s / 0.24 s** | **1.9 s** |
 | OpenAI | not measured | | | | | |
 | Bark 3.0 | 20.2% → 14.7% | 16 → 23 | 3.8% | 5.1% | 0.31 s / 0.79 s | 7.5 s |
-| Bark 3.0 Clean | 24.3% → 13.3% | 16 → 26 | 2.9% | 3.6% | 0.16 s / 0.48 s | 2.5 s |
+| Bark 3.0 Clean | 24.3% → 13.3% | 16 → 26 | 2.9% | 3.6% | 0.16 s / 0.47 s | 2.5 s |
 | Bark 3.0 Plus | 20.6% → 16.1% | 18 → 23 | 3.2% | 5.1% | 0.30 s / 0.73 s | 7.6 s |
 
 ## Footprint
@@ -47,7 +47,7 @@ How the numbers were measured:
 | macOS Speech | macos-sfspeechrecognizer | Apple Speech.framework (SFSpeechRecognizer) | none | | | | | | 0 | Not measured: needs a person to grant Speech Recognition permission, and it streams live from the microphone |
 | Whisper Tiny | ggml-tiny | whisper.cpp (ggml) | https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-tiny.bin | 77691713 | be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21 | 0.05 s per take | 0 (no resident process) | 177 MB / 231 MB | 80 MB | |
 | Whisper Base | ggml-base | whisper.cpp (ggml) | https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.bin | 147951465 | 60ed5bc3dd14eea856493d334349b405782ddcaf0028d4b5df4088345fba2efe | 0.07 s per take | 0 | 271 MB / 325 MB | 144 MB | |
-| Whisper Small | ggml-small | whisper.cpp (ggml) | https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin | 487601967 | 1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b | 0.19 s per take | 0 | 672 MB / 727 MB | 465 MB | Also the translate-to-English model. Drops about 55 words of a 2-min take (the same with `-l en`) |
+| Whisper Small | ggml-small | whisper.cpp (ggml) | https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.bin | 487601967 | 1be3a9b2063867b937e64e2ec7483364a79917e157fa98c5d94b5c1fffea987b | 0.18 s per take | 0 | 672 MB / 727 MB | 465 MB | Also the translate-to-English model. Drops about 55 words of a 2-min take (the same with `-l en`) |
 | Whisper Small.en | ggml-small.en | whisper.cpp (ggml) | https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-small.en.bin | 487614201 | c6138d6d58ecc8322097e0f987c32f1be8bb0a18532a3f88f734d1bbf9c41e5d | 0.18 s per take | 0 | 671 MB / 734 MB | 465 MB | English only. Recommended default |
 | Distil-Whisper Small EN | distil-small.en | whisper.cpp (ggml) | https://huggingface.co/distil-whisper/distil-small.en/resolve/9e4a67ca4569c30be43a3fe7fba1621e504f0093/ggml-distil-small.en.bin | 336191657 | 7691eb11167ab7aaf6b3e05d8266f2fd9ad89c550e433f86ac266ebdee6c970a | 0.13 s per take | 0 | 480 MB / 564 MB | 336 MB | Official ggml, not the old 404 URL. Repeats itself on long takes |
 | Parakeet TDT 0.6B v2 int8 | nemo-parakeet-tdt-0.6b-v2 | onnx-asr 0.12 (ONNX Runtime 1.28, int8) | https://huggingface.co/istupakov/parakeet-tdt-0.6b-v2-onnx/tree/0bbb45a3365852604aef28b538a8f066f4ccaa85 | 661322064 | see EngineCatalog.swift | 6.5 s | 1.2 GB | 5.5 GB / **47.6 GB** | 631 MB + 125 MB venv | English. No chunking, so memory grows with take length; needs chunking before it is safe for long takes |

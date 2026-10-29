@@ -226,6 +226,64 @@ final class EngineSelectionTests: XCTestCase {
         )
     }
 
+    func testWhisperFallbackStaysOnDevice() {
+        let message = WhisperModel.smallEn.unavailableMessage
+        let first = SpeechPrivacy.firstRequest(
+            route: .whisperFallback,
+            supportsOnDevice: true,
+            whisperMessage: message
+        )
+        XCTAssertEqual(first, .recognize(requiresOnDeviceRecognition: true))
+        let failed = SpeechPrivacy.afterFailure(
+            route: .whisperFallback,
+            attemptedOnDevice: true,
+            whisperMessage: message
+        )
+        XCTAssertEqual(failed, .whisperUnavailable(message))
+        XCTAssertFalse(speechPlanLeavesTheMac(first))
+        XCTAssertFalse(speechPlanLeavesTheMac(failed))
+    }
+
+    func testWhisperFallbackWithoutOnDeviceUsesTheWhisperMessage() {
+        let message = WhisperModel.smallEn.unavailableMessage
+        XCTAssertEqual(message, "Whisper Small (English) is not downloaded. Download the model in the menu")
+        let unavailable = SpeechPrivacy.firstRequest(
+            route: .whisperFallback,
+            supportsOnDevice: false,
+            whisperMessage: message
+        )
+        XCTAssertEqual(unavailable, .whisperUnavailable(message))
+        let afterOffDeviceAttempt = SpeechPrivacy.afterFailure(
+            route: .whisperFallback,
+            attemptedOnDevice: false,
+            whisperMessage: message
+        )
+        XCTAssertEqual(afterOffDeviceAttempt, .whisperUnavailable(message))
+        XCTAssertFalse(speechPlanLeavesTheMac(unavailable))
+        XCTAssertFalse(speechPlanLeavesTheMac(afterOffDeviceAttempt))
+    }
+
+    func testChosenSpeechCanStillRetryOffDevice() {
+        let first = SpeechPrivacy.firstRequest(
+            route: .chosenEngine,
+            supportsOnDevice: true,
+            whisperMessage: ""
+        )
+        XCTAssertEqual(first, .recognize(requiresOnDeviceRecognition: true))
+        XCTAssertEqual(
+            SpeechPrivacy.afterFailure(route: .chosenEngine, attemptedOnDevice: true, whisperMessage: ""),
+            .recognize(requiresOnDeviceRecognition: false)
+        )
+        XCTAssertEqual(
+            SpeechPrivacy.firstRequest(route: .chosenEngine, supportsOnDevice: false, whisperMessage: ""),
+            .recognize(requiresOnDeviceRecognition: false)
+        )
+        XCTAssertEqual(
+            SpeechPrivacy.afterFailure(route: .chosenEngine, attemptedOnDevice: false, whisperMessage: ""),
+            .rethrowSpeechError
+        )
+    }
+
     func testDistilModelUsesTheOfficialFileAndSize() {
         let model = WhisperModel.distillSmallEn.model
         let url = model.fileURL(model.files[0].name).absoluteString
@@ -266,5 +324,16 @@ final class EngineSelectionTests: XCTestCase {
         XCTAssertEqual(OpenAITranscriptionCatalog.primaryModel, "gpt-4o-transcribe")
         XCTAssertEqual(OpenAITranscriptionCatalog.endpoint.host, "api.openai.com")
         XCTAssertFalse(TranscriptionEngine.allCases.contains { $0.displayName.isEmpty })
+    }
+}
+
+private func speechPlanLeavesTheMac(_ plan: SpeechRequestPlan) -> Bool {
+    switch plan {
+    case .recognize(let requiresOnDeviceRecognition):
+        return !requiresOnDeviceRecognition
+    case .whisperUnavailable(_):
+        return false
+    case .rethrowSpeechError:
+        return false
     }
 }

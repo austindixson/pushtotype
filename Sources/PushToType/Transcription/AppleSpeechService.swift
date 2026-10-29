@@ -63,51 +63,137 @@ actor AppleSpeechService {
         }
     }
 
-    func transcribe(audioURL: URL, language: String, mode: DictationMode) async throws -> String {
+    func transcribe(
+        audioURL: URL,
+        language: String,
+        mode: DictationMode,
+        route: SpeechTakeRoute = .chosenEngine,
+        whisperMessage: String = ""
+    ) async throws -> String {
         if mode == .translate {
             throw AppleSpeechError.translateUnsupported
         }
         // rewrite + transcribe both use normal STT
-
-        let auth = SFSpeechRecognizer.authorizationStatus()
-        if auth == .notDetermined {
-            let ok = await requestAuthorization()
-            if !ok { throw AppleSpeechError.notAuthorized }
-        } else if auth != .authorized {
-            throw AppleSpeechError.notAuthorized
-        }
+        try await ensureAuthorized(route: route, whisperMessage: whisperMessage)
 
         let locale = locale(for: language)
         guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(),
               recognizer.isAvailable else {
-            throw AppleSpeechError.recognizerUnavailable
+            try throwSpeechOrWhisper(route: route, whisperMessage: whisperMessage, speech: AppleSpeechError.recognizerUnavailable)
         }
 
-        // Try on-device first when available; fall back to default (may use Apple servers).
-        do {
-            return try await runRecognition(
-                recognizer: recognizer,
-                audioURL: audioURL,
-                onDevice: recognizer.supportsOnDeviceRecognition
-            )
-        } catch {
-            if recognizer.supportsOnDeviceRecognition {
-                // Retry without forcing on-device
+        let plan = SpeechPrivacy.firstRequest(
+            route: route,
+            supportsOnDevice: recognizer.supportsOnDeviceRecognition,
+            whisperMessage: whisperMessage
+        )
+        return try await runPlanned(
+            plan,
+            recognizer: recognizer,
+            audioURL: audioURL,
+            route: route,
+            whisperMessage: whisperMessage
+        )
+    }
+
+    private func ensureAuthorized(route: SpeechTakeRoute, whisperMessage: String) async throws {
+        let auth = SFSpeechRecognizer.authorizationStatus()
+        if auth == .notDetermined {
+            let ok = await requestAuthorization()
+            if ok { return }
+            try throwSpeechOrWhisper(route: route, whisperMessage: whisperMessage, speech: AppleSpeechError.notAuthorized)
+        } else if auth != .authorized {
+            try throwSpeechOrWhisper(route: route, whisperMessage: whisperMessage, speech: AppleSpeechError.notAuthorized)
+        }
+    }
+
+    /// A Whisper fallback never opens a second request with on-device recognition turned off.
+    private func runPlanned(
+        _ plan: SpeechRequestPlan,
+        recognizer: SFSpeechRecognizer,
+        audioURL: URL,
+        route: SpeechTakeRoute,
+        whisperMessage: String
+    ) async throws -> String {
+        switch plan {
+        case .recognize(let requiresOnDevice):
+            do {
                 return try await runRecognition(
                     recognizer: recognizer,
                     audioURL: audioURL,
-                    onDevice: false
+                    onDevice: requiresOnDevice,
+                    route: route,
+                    whisperMessage: whisperMessage
+                )
+            } catch {
+                let next = SpeechPrivacy.afterFailure(
+                    route: route,
+                    attemptedOnDevice: requiresOnDevice,
+                    whisperMessage: whisperMessage
+                )
+                return try await finishPlanned(
+                    next,
+                    recognizer: recognizer,
+                    audioURL: audioURL,
+                    speechError: error,
+                    route: route,
+                    whisperMessage: whisperMessage
                 )
             }
-            throw error
+        case .whisperUnavailable(let message):
+            throw WhisperError.processFailed(message)
+        case .rethrowSpeechError:
+            throw AppleSpeechError.recognizerUnavailable
+        }
+    }
+
+    private func finishPlanned(
+        _ plan: SpeechRequestPlan,
+        recognizer: SFSpeechRecognizer,
+        audioURL: URL,
+        speechError: Error,
+        route: SpeechTakeRoute,
+        whisperMessage: String
+    ) async throws -> String {
+        switch plan {
+        case .recognize(let requiresOnDevice):
+            return try await runRecognition(
+                recognizer: recognizer,
+                audioURL: audioURL,
+                onDevice: requiresOnDevice,
+                route: route,
+                whisperMessage: whisperMessage
+            )
+        case .whisperUnavailable(let message):
+            throw WhisperError.processFailed(message)
+        case .rethrowSpeechError:
+            throw speechError
+        }
+    }
+
+    private func throwSpeechOrWhisper(
+        route: SpeechTakeRoute,
+        whisperMessage: String,
+        speech: Error
+    ) throws -> Never {
+        switch route {
+        case .whisperFallback:
+            throw WhisperError.processFailed(whisperMessage)
+        case .chosenEngine:
+            throw speech
         }
     }
 
     private func runRecognition(
         recognizer: SFSpeechRecognizer,
         audioURL: URL,
-        onDevice: Bool
+        onDevice: Bool,
+        route: SpeechTakeRoute,
+        whisperMessage: String
     ) async throws -> String {
+        if route == .whisperFallback && !onDevice {
+            throw WhisperError.processFailed(whisperMessage)
+        }
         let request = SFSpeechURLRecognitionRequest(url: audioURL)
         request.shouldReportPartialResults = true
         request.taskHint = .dictation
