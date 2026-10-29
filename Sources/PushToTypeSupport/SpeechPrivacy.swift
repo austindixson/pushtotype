@@ -74,4 +74,47 @@ public enum SpeechPrivacy {
             return .recognize(requiresOnDeviceRecognition: true)
         }
     }
+
+    /// What to do with an in-progress partial request when the chosen engine changes.
+    /// The current request is dropped first. `.skip` means do not open another one.
+    public static func reviseLivePartials(
+        activeEngine: TranscriptionEngine?,
+        newEngine: TranscriptionEngine,
+        partialsEnabled: Bool,
+        supportsOnDevice: Bool
+    ) -> LivePartialRevision {
+        guard partialsEnabled, let activeEngine, activeEngine != newEngine else {
+            return .unchanged
+        }
+        return .replace(livePartials(engine: newEngine, supportsOnDevice: supportsOnDevice))
+    }
+}
+
+public enum LivePartialRevision: Equatable, Sendable {
+    case unchanged
+    case replace(LivePartialPlan)
+}
+
+/// A speech request the live-partial path can configure without importing Speech.
+public protocol LivePartialSpeechRequest: AnyObject {
+    var requiresOnDeviceRecognition: Bool { get set }
+    var shouldReportPartialResults: Bool { get set }
+}
+
+/// Turns a `LivePartialPlan` into a request. `.skip` does not call the factory.
+public enum LivePartialRequests {
+    public static func make<Request: LivePartialSpeechRequest>(
+        plan: LivePartialPlan,
+        makeRequest: () -> Request
+    ) -> Request? {
+        switch plan {
+        case .skip:
+            return nil
+        case .recognize(let requiresOnDeviceRecognition):
+            let request = makeRequest()
+            request.requiresOnDeviceRecognition = requiresOnDeviceRecognition
+            request.shouldReportPartialResults = true
+            return request
+        }
+    }
 }

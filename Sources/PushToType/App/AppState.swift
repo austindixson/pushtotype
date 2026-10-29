@@ -50,6 +50,9 @@ final class AppState: ObservableObject {
         didSet {
             guard !isHydrating, oldValue != transcriptionEngine else { return }
             UserDefaults.standard.set(transcriptionEngine.rawValue, forKey: "transcriptionEngine")
+            if isRecording {
+                audio.updateTranscriptionEngine(transcriptionEngine)
+            }
             Task { await refreshModelStatus() }
         }
     }

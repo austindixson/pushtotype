@@ -41,6 +41,10 @@ final class AudioCaptureService {
     private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
+    private var feedsLivePartials = false
+    private var partialsRequested = false
+    private var captureLanguage = "auto"
+    private var activeTranscriptionEngine: TranscriptionEngine?
 
     var isRecording: Bool { isRunning }
 
@@ -76,7 +80,10 @@ final class AudioCaptureService {
             throw AudioCaptureError.engineFailed("Could not open audio file: \(error.localizedDescription)")
         }
 
-        let feedSpeech = livePartials && beginLiveSpeech(language: language, transcriptionEngine: transcriptionEngine)
+        partialsRequested = livePartials
+        captureLanguage = language
+        activeTranscriptionEngine = transcriptionEngine
+        feedsLivePartials = livePartials && beginLiveSpeech(language: language, transcriptionEngine: transcriptionEngine)
 
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buffer, _ in
@@ -100,7 +107,7 @@ final class AudioCaptureService {
                 // Don't abort the realtime thread
             }
 
-            if feedSpeech {
+            if self.feedsLivePartials {
                 self.recognitionRequest?.append(buffer)
             }
         }
@@ -126,6 +133,8 @@ final class AudioCaptureService {
         let frames = framesWritten
 
         endLiveSpeech()
+        partialsRequested = false
+        activeTranscriptionEngine = nil
         engine.inputNode.removeTap(onBus: 0)
         if engine.isRunning { engine.stop() }
 
@@ -151,6 +160,8 @@ final class AudioCaptureService {
 
     func cancel() {
         endLiveSpeech()
+        partialsRequested = false
+        activeTranscriptionEngine = nil
         if isRunning {
             engine.inputNode.removeTap(onBus: 0)
             if engine.isRunning { engine.stop() }
@@ -207,8 +218,32 @@ final class AudioCaptureService {
         }
         return nil
     }
+}
 
+extension SFSpeechAudioBufferRecognitionRequest: LivePartialSpeechRequest {}
+
+extension AudioCaptureService {
     // MARK: - Live Speech
+
+    /// Drop the current partial request and open one that matches the engine now selected.
+    func updateTranscriptionEngine(_ transcriptionEngine: TranscriptionEngine) {
+        guard isRunning else { return }
+        let revision = SpeechPrivacy.reviseLivePartials(
+            activeEngine: activeTranscriptionEngine,
+            newEngine: transcriptionEngine,
+            partialsEnabled: partialsRequested,
+            supportsOnDevice: recognizerSupportsOnDevice(language: captureLanguage)
+        )
+        switch revision {
+        case .unchanged:
+            return
+        case .replace(let plan):
+            feedsLivePartials = false
+            endLiveSpeech()
+            activeTranscriptionEngine = transcriptionEngine
+            feedsLivePartials = installLiveRequest(plan, language: captureLanguage)
+        }
+    }
 
     private func beginLiveSpeech(language: String, transcriptionEngine: TranscriptionEngine) -> Bool {
         let auth = SFSpeechRecognizer.authorizationStatus()
@@ -218,9 +253,7 @@ final class AudioCaptureService {
         }
         guard auth == .authorized else { return false }
 
-        let locale: Locale = (language == "auto" || language.isEmpty)
-            ? .current
-            : Locale(identifier: language)
+        let locale = speechLocale(language)
         guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(),
               recognizer.isAvailable else { return false }
 
@@ -228,13 +261,24 @@ final class AudioCaptureService {
             engine: transcriptionEngine,
             supportsOnDevice: recognizer.supportsOnDeviceRecognition
         )
-        guard case .recognize(let onDevice) = plan else { return false }
+        return installLiveRequest(plan, recognizer: recognizer)
+    }
+
+    private func installLiveRequest(_ plan: LivePartialPlan, language: String) -> Bool {
+        let locale = speechLocale(language)
+        guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(),
+              recognizer.isAvailable else { return false }
+        return installLiveRequest(plan, recognizer: recognizer)
+    }
+
+    private func installLiveRequest(_ plan: LivePartialPlan, recognizer: SFSpeechRecognizer) -> Bool {
+        guard let request = LivePartialRequests.make(
+            plan: plan,
+            makeRequest: { SFSpeechAudioBufferRecognitionRequest() }
+        ) else { return false }
+        request.taskHint = .dictation
         speechRecognizer = recognizer
 
-        let request = SFSpeechAudioBufferRecognitionRequest()
-        request.shouldReportPartialResults = true
-        request.taskHint = .dictation
-        request.requiresOnDeviceRecognition = onDevice
         recognitionRequest = request
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, _ in
@@ -249,11 +293,25 @@ final class AudioCaptureService {
     }
 
     private func endLiveSpeech() {
+        feedsLivePartials = false
         recognitionRequest?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
         recognitionRequest = nil
         speechRecognizer = nil
+    }
+
+    private func recognizerSupportsOnDevice(language: String) -> Bool {
+        let locale = speechLocale(language)
+        let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer()
+        return recognizer?.supportsOnDeviceRecognition ?? false
+    }
+
+    private func speechLocale(_ language: String) -> Locale {
+        if language == "auto" || language.isEmpty {
+            return .current
+        }
+        return Locale(identifier: language)
     }
 
     private func ensureMicrophonePermissionSyncSafe() throws {
