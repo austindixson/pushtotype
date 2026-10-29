@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// Who asked for macOS Speech on this take.
 public enum SpeechTakeRoute: Equatable, Sendable {
@@ -115,6 +116,53 @@ public enum LivePartialRequests {
             request.requiresOnDeviceRecognition = requiresOnDeviceRecognition
             request.shouldReportPartialResults = true
             return request
+        }
+    }
+}
+
+/// The feed flag and the speech request, read together by the audio tap.
+///
+/// The tap snapshots both under the lock and appends only to that pair.
+/// A revoke that has already landed produces no append.
+public final class LivePartialGate<Request: AnyObject>: @unchecked Sendable {
+    private struct State {
+        var feeds = false
+        var request: Request?
+    }
+
+    private let lock = OSAllocatedUnfairLock(initialState: State())
+
+    public init() {}
+
+    public func publish(feeds: Bool, request: Request?) {
+        lock.withLock { state in
+            state.feeds = feeds
+            state.request = request
+        }
+    }
+
+    /// Clear both fields. The returned request is the one that was live.
+    @discardableResult
+    public func revoke() -> Request? {
+        lock.withLock { state in
+            let previous = state.request
+            state.feeds = false
+            state.request = nil
+            return previous
+        }
+    }
+
+    /// Snapshot `(feeds, request)` under the lock and append only while that pair is still live.
+    @discardableResult
+    public func appendIfLive(_ use: (Request) -> Void) -> Bool {
+        let snapshot = lock.withLock { state in
+            (feeds: state.feeds, request: state.request)
+        }
+        guard snapshot.feeds, let request = snapshot.request else { return false }
+        return lock.withLock { state in
+            guard state.feeds, let current = state.request, current === request else { return false }
+            use(current)
+            return true
         }
     }
 }
