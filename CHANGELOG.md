@@ -2,8 +2,12 @@
 
 ## [Unreleased]
 
+Pull request: https://github.com/austindixson/pushtotype/pull/2
+
 - macOS Speech stays the first-run engine, because it needs no download and has not been measured yet. Whisper Small.en is the recommended model when you pick Whisper, and the model list marks it recommended. A saved engine or Whisper model is left as you set it. If that model is not on disk, the take uses macOS Speech and says so. Benchmark notes are in `docs/benchmarks.md`.
 - Dictionary: "use effect" becomes useEffect, "open IAPI" and "openRE API" become OpenAI API, "gitribase" and "getra base" become git rebase, and "postgars" and "postgas" become Postgres. "jason" still becomes JSON only in code and shell.
+
+### From pull request 1
 
 Pull request: https://github.com/austindixson/pushtotype/pull/1
 
