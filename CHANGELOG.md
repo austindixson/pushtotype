@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Changing the engine while you hold the hotkey stops the current live partials and opens them again for the engine you picked. Switching away from macOS Speech does not keep sending that audio to Apple.
+- Changing the engine while you hold the hotkey stops the current live partials and opens them again for the engine you picked. Switching away from macOS Speech does not keep sending that audio to Apple. Pull request: https://github.com/austindixson/pushtotype/pull/4
 
 ### Pull request 3
 
