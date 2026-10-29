@@ -160,7 +160,7 @@ struct SettingsView: View {
                             Task { await appState.refreshModelStatus() }
                         }
                     )) {
-                        ForEach(WhisperModel.allCases) { Text($0.displayName).tag($0) }
+                        ForEach(WhisperModel.allCases) { Text($0.pickerLabel).tag($0) }
                     }
                     Text(appState.selectedModel.detail)
                         .font(.caption)

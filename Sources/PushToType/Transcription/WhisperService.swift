@@ -47,7 +47,7 @@ actor WhisperService {
         guard binary != nil else {
             return ModelReadyStatus(
                 ready: false,
-                message: "Install whisper.cpp: brew install whisper-cpp"
+                message: "whisper-cli is not installed. Install it with: brew install whisper-cpp"
             )
         }
 
@@ -64,7 +64,7 @@ actor WhisperService {
 
         return ModelReadyStatus(
             ready: false,
-            message: "Download \(model.ggmlFileName) — run scripts/download-model.sh \(model.rawValue)"
+            message: model.unavailableMessage
         )
     }
 

@@ -10,7 +10,7 @@ Repo: [github.com/austindixson/pushtotype](https://github.com/austindixson/pusht
 - **Articulate** — offline restructuring for AI prompts and project ideas
 - **Dev dictionary** — spoken names like "ver cell" and "engine x" are corrected after transcription
 
-The default engine is one line, `DictationDefaults.engine` in `Sources/PushToTypeSupport/EngineCatalog.swift`. A benchmark will choose it. See [docs/benchmarks.md](./docs/benchmarks.md).
+macOS Speech stays the first-run engine (`DictationDefaults.engine` in `Sources/PushToTypeSupport/EngineCatalog.swift`), because it needs no download and has not been measured yet. Whisper Small.en is the recommended local model when you pick Whisper (`DictationDefaults.whisperModel`). A saved engine or model is left as you set it. Measured numbers are in [docs/benchmarks.md](./docs/benchmarks.md).
 
 ## From the maker of Super Notch
 
@@ -22,14 +22,16 @@ Full roadmap: **[BUILD_PLAN.md](./BUILD_PLAN.md)**
 
 ---
 
-## Why Whisper Small?
+## Why Whisper Small.en?
+
+macOS Speech is still what a new install uses. Whisper Small.en is the recommended Whisper model: 31 of 36 jargon terms before corrections, 3.2% WER on read speech, and 0.72 s median latency on the M1 Max run in [docs/benchmarks.md](./docs/benchmarks.md).
 
 | Model | Size | Dictation | Translate → EN | Notes |
 |-------|------|-----------|----------------|-------|
-| **Whisper Small** | 488 MB | Strong | Yes | Multilingual plus translate |
+| **Small.en** | 488 MB | English | No | Recommended Whisper model |
+| Whisper Small | 488 MB | Strong | Yes | Multilingual plus translate |
 | Whisper Base | 148 MB | Good | Yes | Faster, lighter |
 | Whisper Tiny | 78 MB | OK | Yes | Smallest ggml file |
-| Small.en | 488 MB | English | No | English-only |
 | Distil-small.en | 336 MB | English | No | Official ggml from distil-whisper |
 
 Sizes are the files Hugging Face serves, in decimal MB. Distil-small.en used to point at a missing file on `ggerganov/whisper.cpp` and was labeled 166 MB. The file that actually exists is `distil-whisper/distil-small.en` `ggml-distil-small.en.bin`, 336,191,657 bytes.
@@ -44,7 +46,7 @@ Whisper still does multilingual dictation and speech translation through [whispe
 - **Dictate**, **Translate → English** (Whisper), **Rewrite selection**, **Articulate**
 - Engines:
   - **macOS Speech** (`SFSpeechRecognizer`) — no download
-  - **Whisper** — whisper.cpp, ggml models downloaded on request
+  - **Whisper** — whisper.cpp. Small.en is the recommended model. Multilingual Small still translates. Models download when you ask
   - **Parakeet** — NVIDIA Parakeet TDT 0.6B v2 and v3, int8 ONNX via onnx-asr
   - **Phonon 2** — Fermion Research, English, Apple silicon, MLX
   - **Bark 3.0**, **Bark 3.0 Clean**, **Bark 3.0 Plus** — Conway Research Underdog Bark, MLX on Apple silicon
@@ -123,19 +125,21 @@ Prioritized backlog (detail in [BUILD_PLAN.md](./BUILD_PLAN.md)):
 ```bash
 git clone https://github.com/austindixson/pushtotype.git
 cd pushtotype
-./scripts/setup.sh        # Homebrew whisper.cpp, Whisper Small, then build
+./scripts/setup.sh        # Homebrew whisper.cpp, recommended Whisper Small.en, then build
 ./scripts/run.sh          # launch (clears quarantine if Gatekeeper marked the app)
 ```
 
 `./scripts/run.sh` alone builds first if `dist/PushToType.app` is missing.
 
-Whisper Small only, if you already have the toolchain:
+Whisper Small.en only, if you already have the toolchain:
 
 ```bash
 brew install whisper-cpp
-./scripts/download-model.sh small
+./scripts/download-model.sh small.en
 ./scripts/run.sh
 ```
+
+The app still starts on macOS Speech. Small.en is selected when you switch to Whisper and have not chosen a model. If that file is missing, the take uses macOS Speech and the menu says so. Multilingual Whisper Small remains available for translate.
 
 Other engines are downloaded from Settings after you select them. Parakeet, Phonon 2, and Bark need Apple silicon for their local runtimes. macOS Speech needs no download.
 

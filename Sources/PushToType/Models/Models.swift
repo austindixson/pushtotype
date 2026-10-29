@@ -80,7 +80,8 @@ enum SpeedPreset: String, CaseIterable, Identifiable {
     }
 }
 
-// Speech engines and Whisper models live in PushToTypeSupport (`DictationDefaults.engine`).
+// First-run engine: DictationDefaults.engine (macOS Speech).
+// Whisper size when none is saved: DictationDefaults.whisperModel (Small.en).
 
 // MARK: - Hotkey presets
 

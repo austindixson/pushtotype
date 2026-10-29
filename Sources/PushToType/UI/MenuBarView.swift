@@ -281,7 +281,7 @@ struct MenuBarView: View {
                 .labelsHidden()
 
                 Picker("Model", selection: $appState.selectedModel) {
-                    ForEach(WhisperModel.allCases) { Text($0.displayName).tag($0) }
+                    ForEach(WhisperModel.allCases) { Text($0.pickerLabel).tag($0) }
                 }
                 .labelsHidden()
                 .onChange(of: appState.selectedModel) { _, _ in

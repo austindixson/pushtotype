@@ -53,9 +53,9 @@ final class AppState: ObservableObject {
             Task { await refreshModelStatus() }
         }
     }
-    @Published var selectedModel: WhisperModel = .small {
+    @Published var selectedModel: WhisperModel = DictationDefaults.whisperModel {
         didSet {
-            guard !isHydrating else { return }
+            guard !isHydrating, oldValue != selectedModel else { return }
             UserDefaults.standard.set(selectedModel.rawValue, forKey: "modelID")
         }
     }
@@ -68,6 +68,7 @@ final class AppState: ObservableObject {
     }
     @Published var speedPreset: SpeedPreset = .balanced {
         didSet {
+            guard oldValue != speedPreset else { return }
             guard !isHydrating else { return }
             UserDefaults.standard.set(speedPreset.rawValue, forKey: "speedPreset")
             // Only tweak Whisper model/language — never force-switch engine (that caused snap-back)
@@ -169,6 +170,9 @@ final class AppState: ObservableObject {
     private var pipelineTask: Task<Void, Never>?
     private var sessionID = UUID()
     private var rewriteSourceText: String?
+    /// Set when this take used macOS Speech because the selected Whisper model was not available.
+    /// The saved engine is left alone.
+    private var takeNotice: String?
 
     private init() {
         loadPersistedSettings()
@@ -193,9 +197,7 @@ final class AppState: ObservableObject {
         if let value = defaults.string(forKey: "speedPreset"), let preset = SpeedPreset(rawValue: value) {
             speedPreset = preset
         }
-        if let value = defaults.string(forKey: "modelID"), let model = WhisperModel(rawValue: value) {
-            selectedModel = model
-        }
+        selectedModel = EngineSelection.resolveWhisperModel(stored: defaults.string(forKey: "modelID"))
         if let value = defaults.string(forKey: "parakeetModelID"), let model = ParakeetModel(rawValue: value) {
             selectedParakeetModel = model
         }
@@ -749,6 +751,8 @@ final class AppState: ObservableObject {
         livePreview = text.isEmpty ? "(no speech detected)" : text
         guard !text.isEmpty else {
             statusText = "No speech detected"
+            errorMessage = takeNotice
+            takeNotice = nil
             keepOverlayBrieflyThenHide()
             try? FileManager.default.removeItem(at: sampleURL)
             return
@@ -759,6 +763,8 @@ final class AppState: ObservableObject {
             await pasteTranscript(text, dictationMode: dictationMode)
         } else {
             statusText = "Copied"
+            errorMessage = takeNotice
+            takeNotice = nil
             if showLiveOverlay {
                 showOverlay = true
                 overlay?.show()
@@ -795,14 +801,25 @@ final class AppState: ObservableObject {
         switch method {
         case .accessibility, .appleScriptPaste, .terminalPaste, .typedText:
             statusText = intoTerminal ? "Pasted into \(targetName) ✓" : "Inserted into \(targetName) ✓"
-            errorMessage = nil
+            errorMessage = takeNotice
         case .clipboardPaste:
             statusText = "Sent paste to \(targetName)"
-            errorMessage = nil
+            errorMessage = takeNotice
         case .clipboardOnly, nil:
             statusText = "Copied — press ⌘V in \(targetName)"
-            errorMessage = pasteFailureDetail()
+            errorMessage = combinedNotice(pasteFailureDetail())
         }
+        takeNotice = nil
+    }
+
+    private func combinedNotice(_ detail: String?) -> String? {
+        if let notice = takeNotice, let detail {
+            return "\(notice) \(detail)"
+        }
+        if let notice = takeNotice {
+            return notice
+        }
+        return detail
     }
 
     private func pasteFailureDetail() -> String? {
@@ -865,10 +882,32 @@ final class AppState: ObservableObject {
         mode: DictationMode,
         language: String
     ) async throws -> String {
+        takeNotice = nil
         switch engine {
         case .appleSpeech:
             return try await appleSpeech.transcribe(audioURL: url, language: language, mode: mode)
         case .whisper:
+            let status = await whisper.ensureReady(model: whisperModel)
+            let plan = EngineSelection.engineForTake(
+                selected: .whisper,
+                whisperReady: status.ready,
+                translating: mode == .translate,
+                unavailableNotice: EngineSelection.whisperUnavailableNotice(reason: status.message)
+            )
+            if plan.engine == .appleSpeech {
+                let text = try await appleSpeech.transcribe(
+                    audioURL: url,
+                    language: language,
+                    mode: mode,
+                    route: .whisperFallback,
+                    whisperMessage: status.message
+                )
+                takeNotice = plan.notice
+                return text
+            }
+            if !status.ready {
+                throw WhisperError.processFailed(status.message)
+            }
             return try await whisper.transcribe(
                 audioURL: url,
                 model: whisperModel,
