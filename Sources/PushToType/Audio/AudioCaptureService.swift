@@ -38,10 +38,9 @@ final class AudioCaptureService {
     private var peakLevel: Float = 0
     private var framesWritten: AVAudioFramePosition = 0
 
-    private var recognitionRequest: SFSpeechAudioBufferRecognitionRequest?
+    private let partialGate = LivePartialGate<SFSpeechAudioBufferRecognitionRequest>()
     private var recognitionTask: SFSpeechRecognitionTask?
     private var speechRecognizer: SFSpeechRecognizer?
-    private var feedsLivePartials = false
     private var partialsRequested = false
     private var captureLanguage = "auto"
     private var activeTranscriptionEngine: TranscriptionEngine?
@@ -83,7 +82,10 @@ final class AudioCaptureService {
         partialsRequested = livePartials
         captureLanguage = language
         activeTranscriptionEngine = transcriptionEngine
-        feedsLivePartials = livePartials && beginLiveSpeech(language: language, transcriptionEngine: transcriptionEngine)
+        partialGate.revoke()
+        if livePartials {
+            _ = beginLiveSpeech(language: language, transcriptionEngine: transcriptionEngine)
+        }
 
         input.removeTap(onBus: 0)
         input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) { [weak self] buffer, _ in
@@ -107,8 +109,8 @@ final class AudioCaptureService {
                 // Don't abort the realtime thread
             }
 
-            if self.feedsLivePartials {
-                self.recognitionRequest?.append(buffer)
+            self.partialGate.appendIfLive { request in
+                request.append(buffer)
             }
         }
 
@@ -238,10 +240,9 @@ extension AudioCaptureService {
         case .unchanged:
             return
         case .replace(let plan):
-            feedsLivePartials = false
             endLiveSpeech()
             activeTranscriptionEngine = transcriptionEngine
-            feedsLivePartials = installLiveRequest(plan, language: captureLanguage)
+            _ = installLiveRequest(plan, language: captureLanguage)
         }
     }
 
@@ -265,6 +266,7 @@ extension AudioCaptureService {
     }
 
     private func installLiveRequest(_ plan: LivePartialPlan, language: String) -> Bool {
+        guard SFSpeechRecognizer.authorizationStatus() == .authorized else { return false }
         let locale = speechLocale(language)
         guard let recognizer = SFSpeechRecognizer(locale: locale) ?? SFSpeechRecognizer(),
               recognizer.isAvailable else { return false }
@@ -275,11 +277,12 @@ extension AudioCaptureService {
         guard let request = LivePartialRequests.make(
             plan: plan,
             makeRequest: { SFSpeechAudioBufferRecognitionRequest() }
-        ) else { return false }
+        ) else {
+            partialGate.revoke()
+            return false
+        }
         request.taskHint = .dictation
         speechRecognizer = recognizer
-
-        recognitionRequest = request
 
         recognitionTask = recognizer.recognitionTask(with: request) { [weak self] result, _ in
             guard let result else { return }
@@ -289,15 +292,15 @@ extension AudioCaptureService {
                 self?.onPartial?(text)
             }
         }
+        partialGate.publish(feeds: true, request: request)
         return true
     }
 
     private func endLiveSpeech() {
-        feedsLivePartials = false
-        recognitionRequest?.endAudio()
+        let previous = partialGate.revoke()
+        previous?.endAudio()
         recognitionTask?.cancel()
         recognitionTask = nil
-        recognitionRequest = nil
         speechRecognizer = nil
     }
 

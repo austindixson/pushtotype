@@ -437,6 +437,59 @@ final class EngineSelectionTests: XCTestCase {
     }
 }
 
+final class LivePartialGateTests: XCTestCase {
+    func testAppendAfterRevokeDoesNothing() {
+        let gate = LivePartialGate<NSObject>()
+        let request = NSObject()
+        gate.publish(feeds: true, request: request)
+        var appends = 0
+        XCTAssertTrue(gate.appendIfLive { _ in appends += 1 })
+        XCTAssertEqual(appends, 1)
+        let revoked = gate.revoke()
+        XCTAssertTrue(revoked === request)
+        XCTAssertFalse(gate.appendIfLive { _ in appends += 1 })
+        XCTAssertEqual(appends, 1)
+    }
+
+    func testConcurrentRevokeAndAppendDoesNotCrashOrAppendAfterRevoke() {
+        let gate = LivePartialGate<NSObject>()
+        gate.publish(feeds: true, request: NSObject())
+        let appends = LivePartialAppendCount()
+        let group = DispatchGroup()
+        for _ in 0..<6 {
+            group.enter()
+            DispatchQueue.global().async {
+                for _ in 0..<300 {
+                    gate.appendIfLive { _ in
+                        appends.add()
+                    }
+                }
+                group.leave()
+            }
+        }
+        group.enter()
+        DispatchQueue.global().async {
+            gate.revoke()
+            gate.publish(feeds: true, request: NSObject())
+            gate.revoke()
+            group.leave()
+        }
+        group.wait()
+        let settled = appends.value
+        XCTAssertFalse(gate.appendIfLive { _ in
+            appends.add()
+        })
+        XCTAssertEqual(appends.value, settled)
+    }
+}
+
+/// Increments only happen inside `LivePartialGate.appendIfLive`, which holds the gate lock.
+private final class LivePartialAppendCount: @unchecked Sendable {
+    private var stored = 0
+    func add() { stored += 1 }
+    var value: Int { stored }
+}
+
 private func livePartialPlanLeavesTheMac(_ plan: LivePartialPlan) -> Bool {
     switch plan {
     case .recognize(let requiresOnDeviceRecognition):
