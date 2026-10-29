@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- The live-partial feed flag and speech request are updated together under a lock, so a microphone buffer cannot reach Apple after you switch engines or stop.
+- The live-partial feed flag and speech request are updated together under a lock, so a microphone buffer cannot reach Apple after you switch engines or stop. Pull request: https://github.com/austindixson/pushtotype/pull/5
 
 ### Pull request 4
 
