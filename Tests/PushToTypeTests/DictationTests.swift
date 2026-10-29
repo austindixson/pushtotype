@@ -263,6 +263,33 @@ final class EngineSelectionTests: XCTestCase {
         XCTAssertFalse(speechPlanLeavesTheMac(afterOffDeviceAttempt))
     }
 
+    func testLivePartialsStayOnDeviceUnlessSpeechWasChosen() {
+        let whisperOnDevice = SpeechPrivacy.livePartials(engine: .whisper, supportsOnDevice: true)
+        let whisperUnsupported = SpeechPrivacy.livePartials(engine: .whisper, supportsOnDevice: false)
+        XCTAssertEqual(whisperOnDevice, .recognize(requiresOnDeviceRecognition: true))
+        XCTAssertEqual(whisperUnsupported, .skip)
+        XCTAssertFalse(livePartialPlanLeavesTheMac(whisperOnDevice))
+        XCTAssertFalse(livePartialPlanLeavesTheMac(whisperUnsupported))
+
+        for engine in TranscriptionEngine.allCases where engine != .appleSpeech {
+            XCTAssertEqual(
+                SpeechPrivacy.livePartials(engine: engine, supportsOnDevice: true),
+                .recognize(requiresOnDeviceRecognition: true)
+            )
+            XCTAssertEqual(
+                SpeechPrivacy.livePartials(engine: engine, supportsOnDevice: false),
+                .skip
+            )
+        }
+
+        let speechOnDevice = SpeechPrivacy.livePartials(engine: .appleSpeech, supportsOnDevice: true)
+        let speechUnsupported = SpeechPrivacy.livePartials(engine: .appleSpeech, supportsOnDevice: false)
+        XCTAssertEqual(speechOnDevice, .recognize(requiresOnDeviceRecognition: false))
+        XCTAssertEqual(speechUnsupported, .recognize(requiresOnDeviceRecognition: false))
+        XCTAssertTrue(livePartialPlanLeavesTheMac(speechOnDevice))
+        XCTAssertTrue(livePartialPlanLeavesTheMac(speechUnsupported))
+    }
+
     func testChosenSpeechCanStillRetryOffDevice() {
         let first = SpeechPrivacy.firstRequest(
             route: .chosenEngine,
@@ -324,6 +351,15 @@ final class EngineSelectionTests: XCTestCase {
         XCTAssertEqual(OpenAITranscriptionCatalog.primaryModel, "gpt-4o-transcribe")
         XCTAssertEqual(OpenAITranscriptionCatalog.endpoint.host, "api.openai.com")
         XCTAssertFalse(TranscriptionEngine.allCases.contains { $0.displayName.isEmpty })
+    }
+}
+
+private func livePartialPlanLeavesTheMac(_ plan: LivePartialPlan) -> Bool {
+    switch plan {
+    case .recognize(let requiresOnDeviceRecognition):
+        return !requiresOnDeviceRecognition
+    case .skip:
+        return false
     }
 }
 

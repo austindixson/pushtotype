@@ -18,6 +18,14 @@ public enum SpeechRequestPlan: Equatable, Sendable {
     case rethrowSpeechError
 }
 
+/// Whether live partials may open a speech request while the hotkey is held.
+public enum LivePartialPlan: Equatable, Sendable {
+    /// Do not attach a recognizer. The microphone stays in the local recording only.
+    case skip
+    /// Append mic buffers to a speech request.
+    case recognize(requiresOnDeviceRecognition: Bool)
+}
+
 /// Decides whether a speech request may leave the Mac.
 ///
 /// A Whisper fallback never sets `requiresOnDeviceRecognition` to false.
@@ -52,6 +60,18 @@ public enum SpeechPrivacy {
             return .rethrowSpeechError
         case .whisperFallback:
             return .whisperUnavailable(whisperMessage)
+        }
+    }
+
+    /// Live partials leave the Mac only when the user chose macOS Speech.
+    /// Any other engine uses on-device recognition, or no partials if that is unavailable.
+    public static func livePartials(engine: TranscriptionEngine, supportsOnDevice: Bool) -> LivePartialPlan {
+        switch engine {
+        case .appleSpeech:
+            return .recognize(requiresOnDeviceRecognition: false)
+        case .whisper, .parakeet, .phonon, .openAI, .bark30, .bark30Clean, .bark30Plus:
+            guard supportsOnDevice else { return .skip }
+            return .recognize(requiresOnDeviceRecognition: true)
         }
     }
 }

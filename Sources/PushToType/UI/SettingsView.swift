@@ -391,7 +391,7 @@ struct SettingsView: View {
     private var aboutTab: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("PushToType").font(.title2.weight(.bold))
-            Text("Mac dictation. Local engines keep audio on this Mac. OpenAI sends a recording only when you select that engine.")
+            Text("Mac dictation. Local engines keep audio on this Mac. macOS Speech, when you choose it, can send audio to Apple. OpenAI sends a recording only when you select that engine.")
                 .foregroundStyle(.secondary)
             Divider()
             Group {
