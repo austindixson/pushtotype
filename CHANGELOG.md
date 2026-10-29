@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 
-- Live partials stay on this Mac unless you chose macOS Speech. If on-device recognition is unavailable, those partials are skipped instead of being sent to Apple.
+- Live partials stay on this Mac unless you chose macOS Speech. If on-device recognition is unavailable, those partials are skipped instead of being sent to Apple. Pull request: https://github.com/austindixson/pushtotype/pull/3
 
 ### Pull request 2
 
