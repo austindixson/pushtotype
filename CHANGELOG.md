@@ -2,6 +2,10 @@
 
 ## [Unreleased]
 
+- A live partial is sent only when the revoke count it just read is still current, so a buffer cannot slip out after the request was cleared.
+
+### Pull request 5
+
 - The live-partial feed flag and speech request are updated together under a lock, so a microphone buffer cannot reach Apple after you switch engines or stop. Pull request: https://github.com/austindixson/pushtotype/pull/5
 
 ### Pull request 4
